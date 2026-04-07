@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Behavior Latticing</title>
+  <style>
+    :root {
+      --accent: #E8607A;
+      --accent-light: #FFF4F6;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #ddd;
+      --bg: #fff;
+      --section-bg: #f8f9fb;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.65;
+      font-size: 16px;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Header ── */
+    header {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 60px 20px 40px;
+      text-align: center;
+    }
+
+    .venue-tag {
+      display: inline-block;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 18px;
+    }
+
+    header h1 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 700;
+      line-height: 1.25;
+      max-width: 760px;
+      margin: 0 auto 8px;
+    }
+
+    header h1 span { color: var(--accent); }
+
+    .subtitle {
+      font-size: 1.05rem;
+      color: var(--muted);
+      max-width: 680px;
+      margin: 0 auto 28px;
+    }
+
+    .authors {
+      font-size: 1rem;
+      margin-bottom: 6px;
+    }
+
+    .affiliation {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 20px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: 1.5px solid var(--accent);
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #E8607A; text-decoration: none; }
+    .btn-outline { background: #fff; color: var(--accent); }
+    .btn-outline:hover { background: var(--accent-light); text-decoration: none; }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    section { padding: 56px 20px; }
+    section:nth-child(even) { background: var(--section-bg); }
+
+    h2 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--accent-light);
+    }
+
+    /* ── Teaser ── */
+    .teaser-wrap {
+      margin: 0 auto 12px;
+      max-width: 820px;
+    }
+
+    .teaser-wrap img {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .caption {
+      font-size: 0.88rem;
+      color: var(--muted);
+      text-align: center;
+      max-width: 720px;
+      margin: 10px auto 0;
+    }
+
+    /* ── Abstract ── */
+    .abstract-text {
+      max-width: 820px;
+      margin: 0 auto;
+      font-size: 1rem;
+      color: var(--text);
+    }
+
+    /* ── Key contributions ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 20px;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px 20px;
+    }
+
+    .card-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+    .card p { font-size: 0.9rem; color: var(--muted); }
+
+    /* ── Figures ── */
+    .fig-block {
+      max-width: 820px;
+      margin: 0 auto 40px;
+    }
+
+    .fig-block:last-child { margin-bottom: 0; }
+
+    .fig-block img {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    /* ── Results ── */
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 600px) {
+      .results-grid { grid-template-columns: 1fr; }
+    }
+
+    .stat-box {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .stat-box .number {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.1;
+    }
+
+    .stat-box .label {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .results-fig {
+      max-width: 820px;
+      margin: 32px auto 0;
+    }
+
+    .results-fig img {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    /* ── Quotes ── */
+    blockquote {
+      border-left: 3px solid var(--accent);
+      margin: 16px 0;
+      padding: 12px 18px;
+      background: var(--accent-light);
+      border-radius: 0 6px 6px 0;
+      font-style: italic;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    blockquote cite {
+      display: block;
+      margin-top: 8px;
+      font-style: normal;
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+
+    .quotes-wrap {
+      max-width: 820px;
+      margin: 24px auto 0;
+    }
+
+    /* ── BibTeX ── */
+    pre {
+      background: #f4f4f4;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 18px;
+      font-size: 0.82rem;
+      overflow-x: auto;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 32px 20px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════ -->
+<header>
+  <h1>Behavior Latticing: Inferring User Motivations from Unstructured Interactions</h1>
+  <p class="subtitle">A new architecture for building personal AI systems that understand the <em>why</em> behind user behavior.</p>
+
+  <p class="authors">
+    <a href="https://dorazhao.github.io/" target="_blank">Dora Zhao</a>&ensp;&middot;&ensp;
+    <a href="https://michelle123lam.github.io/" target="_blank">Michelle S. Lam</a>&ensp;&middot;&ensp;
+    <a href="https://cs.stanford.edu/~diyiy/" target="_blank">Diyi Yang</a>&ensp;&middot;&ensp;
+    <a href="https://hci.stanford.edu/msb/" target="_blank">Michael S. Bernstein</a>
+  </p>
+  <p class="affiliation">Stanford University</p>
+
+  <div class="btn-row">
+    <a class="btn btn-primary" href="#">&#128196; Paper</a>
+    <a class="btn btn-outline" href="#">&#128190; Code</a>
+    <a class="btn btn-outline" href="#bibtex">&#128203; BibTeX</a>
+  </div>
+</header>
+
+
+<!-- ═══════════════════════════════════════════
+     TEASER
+═══════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <div class="teaser-wrap">
+      <img src="figures/Pull_v5.png" alt="Teaser figure showing behavior latticing connecting observations into user insights that steer the DAWN agent." />
+    </div>
+    <p class="caption">
+      We introduce <em>behavior latticing</em>, an architecture for inferring insights about the motivations behind user behavior from unstructured interaction data. These insights enable the design of personal AI systems that can address users' underlying needs rather than only solving the task at hand.
+    </p>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     ABSTRACT
+═══════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Abstract</h2>
+    <p class="abstract-text">
+      A long-standing vision of computing is the personal AI system: one that understands us well enough to address our underlying needs. Today's AI focuses on <em>what</em> users do, ignoring <em>why</em> they might be doing such things in the first place. As a result, AI systems default to optimizing or repeating existing behaviors (e.g., user has ChatGPT complete their homework) even when they run counter to users' needs (e.g., gaining subject expertise).
+    </p>
+    <br />
+    <p class="abstract-text">
+      We introduce an architecture for building user understanding through <strong>behavior latticing</strong>, connecting seemingly disparate behaviors, synthesizing them into insights about the motivations underlying these behaviors, and repeating this process over long spans of interaction data. This affords new capabilities, including being able to infer users' needs rather than just their tasks and connecting subtle patterns to produce conclusions that users themselves may not have previously realized.
+    </p>
+    <br />
+    <p class="abstract-text">
+      In an evaluation, we validate that behavior latticing produces accurate insights about the user with significantly greater interpretive depth compared to state-of-the-art approaches. To demonstrate the new interactive capabilities that behavior lattices afford, we instantiate <strong>Dawn</strong>, a personal AI agent steered by user insights, finding that our agent is significantly better at addressing users' needs while still providing immediate utility.
+    </p>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     KEY CONTRIBUTIONS
+═══════════════════════════════════════════ -->
+<!-- <section>
+  <div class="container">
+    <h2>Key Contributions</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">&#128209;</div>
+        <h3>Behavior Latticing Architecture</h3>
+        <p>A many-to-many, multi-layer algorithm that connects observations from long-horizon interaction data into interpretive user insights.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#129302;</div>
+        <h3>Dawn: Insight-Steered Agent</h3>
+        <p>A personal AI agent that uses behavior lattice insights to propose and execute actions that address users' underlying needs.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#128202;</div>
+        <h3>Longitudinal Evaluation</h3>
+        <p>End-to-end user study with 12 participants, 4+ days of real computer usage data, and 140 rated agent actions.</p>
+      </div>
+    </div>
+  </div>
+</section> -->
+
+
+<!-- ═══════════════════════════════════════════
+     HOW IT WORKS
+═══════════════════════════════════════════ -->
+<!-- <section>
+  <div class="container">
+    <h2>How It Works</h2>
+
+    <div class="fig-block">
+      <img src="figures/mapping.png" alt="Behavior latticing capabilities: connecting across contexts, juxtaposing tensions, and linking patterns across time." />
+      <p class="caption">
+        Behavior latticing enables three key capabilities using actual participant data: (A) connecting observations from different apps that share a latent motivation, (B) juxtaposing observations that are in tension, and (C) linking recurring patterns across time.
+      </p>
+    </div>
+
+    <div class="fig-block">
+      <img src="figures/Pipeline_v4.png" alt="The behavior latticing pipeline: from raw observations to layered user insights." />
+      <p class="caption">
+        The pipeline starts with raw interaction data (e.g., screenshots), extracts discrete observations, and recursively applies behavior latticing to produce a multi-layer graph of user insights — each grounded in evidence from the layers below.
+      </p>
+    </div>
+  </div>
+</section> -->
+
+
+<!-- ═══════════════════════════════════════════
+     DAWN SYSTEM
+═══════════════════════════════════════════ -->
+<!-- <section>
+  <div class="container">
+    <h2>The Dawn System</h2>
+    <div class="fig-block">
+      <img src="figures/system.png" alt="Dawn system diagram showing insight generation, action proposal, and agent execution." />
+      <p class="caption">
+        Dawn discovers tasks where users need personal assistance (A), retrieves relevant insights from the behavior lattice (B), proposes personalized actions (C), and allows users to provide additional context before executing (D).
+      </p>
+    </div>
+    <p style="max-width:820px; margin: 20px auto 0; color: var(--muted); font-size: 0.95rem;">
+      Dawn is deployed as an Electron desktop app. It uses screenshots of computer usage as input, processes them with a vision-language model, and runs behavior latticing to produce user insights. For each task the agent could assist with, it retrieves the most relevant insights via cross-encoder reranking and proposes actions executed by a ReAct tool-calling agent with access to Google Drive, local filesystem, Apple Calendar, and web search.
+    </p>
+  </div>
+</section> -->
+
+
+<!-- ═══════════════════════════════════════════
+     RESULTS
+═══════════════════════════════════════════ -->
+<!-- <section>
+  <div class="container">
+    <h2>Results</h2>
+
+    <div class="results-grid">
+      <div class="stat-box">
+        <div class="number">1.17 vs &minus;0.37</div>
+        <div class="label">
+          Depth rating (Insights vs. Observations, &minus;3 to +3)<br />
+          <em>t = 7.78, p &lt; .001, d = 0.95</em>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="number">4.60 vs 3.84</div>
+        <div class="label">
+          Underlying needs addressed (Dawn vs. Baseline, 1–7)<br />
+          <em>t = 2.69, p = 0.01</em>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="number">2&times;</div>
+        <div class="label">
+          More actions rated as addressing needs "Very Much" or "Extremely" compared to the baseline agent
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="number">Equal</div>
+        <div class="label">
+          Immediate utility between Dawn and baseline (4.87 vs. 4.87)<br />
+          <em>No trade-off required</em>
+        </div>
+      </div>
+    </div>
+
+    <div class="results-fig">
+      <img src="figures/technicaleval.png" alt="Technical evaluation: depth and accuracy ratings comparing Insights vs Observations." />
+      <p class="caption">
+        Insights are rated significantly deeper than Observations (p &lt; .001), while accuracy remains comparable — participants still somewhat agree that insights are accurate.
+      </p>
+    </div>
+
+    <div class="results-fig">
+      <img src="figures/e2e_hoz.png" alt="End-to-end evaluation: Dawn vs Baseline on underlying needs and immediate utility." />
+      <p class="caption">
+        Dawn significantly better addresses users' underlying needs (p = 0.01) while maintaining the same level of immediate utility as the baseline agent.
+      </p>
+    </div>
+
+    <div class="quotes-wrap">
+      <blockquote>
+        "This [insight] talks about a thing that I don't think I've put into words quite as well as it did but have regularly talked to my spouse about how this affects my life... I think this is something that would take a therapist multiple meetings with me to reach this conclusion."
+        <cite>— P12, end-to-end evaluation participant</cite>
+      </blockquote>
+      <blockquote>
+        "The way I view myself and perceive myself is more blurry, but [seeing the insights] is like looking at a mirror and finally understanding."
+        <cite>— P21, end-to-end evaluation participant</cite>
+      </blockquote>
+      <blockquote>
+        "This [action] is what I'm actually trying to do for myself manually... it kind of articulated a vision that I didn't know I needed, but it's kind of what I was going towards."
+        <cite>— P17, on insight-driven agent actions</cite>
+      </blockquote>
+    </div>
+  </div>
+</section> -->
+
+
+<!-- ═══════════════════════════════════════════
+     BIBTEX
+═══════════════════════════════════════════ -->
+<section id="bibtex">
+  <div class="container">
+    <h2>BibTeX</h2>
+    <pre>@article{zhao2026lattice,
+  title     = {Behavior Latticing: Inferring User Motivations from Unstructured Interactions},
+  author    = {Zhao, Dora and Lam, Michelle S. and Yang, Diyi and Bernstein, Michael S.},
+  year      = {2026}
+}</pre>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     FOOTER
+═══════════════════════════════════════════ -->
+<footer>
+  <p>Behavior Latticing &mdash; Stanford HCI Group</p>
+</footer>
+
+</body>
+</html>

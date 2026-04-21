@@ -62,6 +62,6 @@ MOCK_OBSERVATIONS = [
         "id": 5,
         "observation": "User is feeling sad about the party",
         "confidence": 10,
-        "metadata": {"input_session": 1, "time": "2026-05-22 10:05:00"}
+        "metadata": {"input_session": 1, "time": "2026-04-29 10:05:00"}
     }
 ]

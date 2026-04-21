@@ -145,8 +145,8 @@ At the end, review all of the insights and ensure that you did not miss importan
 
 # Example
 Examples of synthesized insights:
-{
-    title": "Informality as Strategic Ambiguity",
+{{
+    "title": "Informality as Strategic Ambiguity",
     "tagline": "Mark’s frequent self-deprecating comments and expressions of uncertainty serve a dual purpose: authentically conveying anxiety while also inviting collaboration and feedback.",
     "insight": "Mark’s deliberate code-switching between formal academic prose and aggressively casual, irreverent language serves to assert status, test boundaries, and manage likability across varied social hierarchies. Casual language lets him engage in competitive or harsh discourse among peers with plausible deniability, while deference and formality reappear with senior collaborators.",
     "merged": [
@@ -154,12 +154,11 @@ Examples of synthesized insights:
       ],
     "context": "This linguistic flexibility is seen in Slack and Messages with peers (where he jokes, teases, and self-deprecates) versus careful formality in Overleaf or communication with advisors.",
     "reasoning": "Contrast between casual authority in technical help ('this shit'), banter with Connor ('hahaha yeah he took the money'), deferential tones used with advisor Maria, and strictly formal, precise academic writing in Overleaf demonstrates adaptive code-switching."
-}
+}}
 
 # Input
-These are the insight generated across ${num} sessions.
-
-${insights}
+Insights:
+{insights}
 
 # Output
 Return the final list of insights in a JSON format. 
@@ -171,7 +170,7 @@ Return the final list of insights in a JSON format.
             "tagline": "Provide the insight in a succinct statement (1-2 sentences).", 
             "insight": "Insight in 3-4 sentences",
             "context": "1-2 sentences when this insight might apply (e.g., when writing text, in social settings)",
-            "merged": [List of insight IDs (Session #-ID) that are merged], // Return a list with a single ID if the insight is not merged
+            "merged": [List of insight IDs that are merged], // Return a list with a single ID if the insight is not merged
             "supporting_evidence": "1-2 sentences explaining why this insight emerged"
         }},
     ...

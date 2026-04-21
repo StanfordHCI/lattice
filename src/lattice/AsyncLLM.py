@@ -110,7 +110,7 @@ async def call_gpt(client, prompt, model, resp_format=None):
             resp = await client.responses.parse(
                 model=model,
                 input=[{"role": "user", "content": prompt}],
-                text_format=resp_format,
+                text_format=resp_format
             )
 
             return resp.output_parsed

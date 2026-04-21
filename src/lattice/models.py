@@ -1,7 +1,12 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
+from typing import List, Literal, Optional
+from dataclasses import dataclass
 
 
+@dataclass
+class Separator:
+    type: str
+    value: str
 
 class Interaction(BaseModel):
     interaction: str

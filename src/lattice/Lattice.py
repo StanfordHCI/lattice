@@ -3,21 +3,35 @@ from consts import MAX_CONCURRENT, MIN_INSIGHTS
 from utils import batched_call, parse_model_json, parse_model_json_with_fallback
 from AsyncLLM import AsyncLLM
 from SyncLLM import SyncLLM
-from models import Insights, SupportingObservationsResponse
-import json 
+from Observer import Observer
+from Visualize import Visualizer
+from models import Insights, Separator, SupportingObservationsResponse
+import json
+import logging
+import textwrap
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class Lattice:
-    def __init__(self, name: str, observations: list, 
-    model: AsyncLLM, evidence_model: AsyncLLM, format_model: SyncLLM):
+    def __init__(self, name: str, interactions: list, description: str,
+    model: AsyncLLM, evidence_model: AsyncLLM, format_model: SyncLLM, observations: list | None = None):
+        self.observer = Observer(name=name, model=model, format_model=format_model, description=description)
         self.name = name    
-        self.observations = observations
-        self.lattice = {"nodes": {0: self.observations}, "edges": {1: []}}
+        self.lattice = {"nodes": {0: []}, "edges": {1: []}}
         self.model = model
         self.evidence_model = evidence_model
         self.format_model = format_model
-        self.layer_num = 1
-        self.current_layer = self.observations
-        self.num_nodes = [len(self.observations)]
+        if observations is not None:
+            self.observations = observations
+            self.current_layer = self.observations
+            self.num_nodes = [len(self.observations)]
+            self.layer_num = 1
+        else:
+            self.current_layer = []
+            self.num_nodes = []
+            self.layer_num = 0
+
     
     def _split_by_time(self, nodes: list, separate_by: str) -> list:
         """
@@ -72,16 +86,14 @@ class Lattice:
 
         return groups
 
-    def _split_input(self, input_nodes: list, separator: dict):
+    def _split_input(self, input_nodes: list, separator: Separator):
         """
         Split the input into a list of strings based on the separator.
         """
-        if separator["type"] == "time":
-            return self._split_by_time(input_nodes, separator["value"])
-        # elif separator["type"] == "observations":
-        #     return input.split(separator["value"])
-        # elif separator["type"] == "sessions":
-        #     return input.split(separator["value"])
+        if separator.type == "time":
+            return self._split_by_time(input_nodes, separator.value)
+        else:
+            raise ValueError(f"Separator type {separator.type!r} not supported")
     
     def _fmt_nodes(self, nodes: list, node_type: str):
         """
@@ -97,16 +109,40 @@ class Lattice:
                 raise ValueError(f"Node type {node_type} not supported")
         return "\n".join(fmt_nodes)
     
-    def _save_lattice(self):
+    def print_layer(self, layer: list | None = None):
         """
-        Save the lattice to a file.
+        Print the insights in a layer (defaults to the current layer).
         """
-        with open("lattice.json", "w") as f:
-            json.dump(self.lattice, f)
+        nodes = layer if layer is not None else self.current_layer
+        if not nodes:
+            print("(empty layer)")
+            return
+        sample = nodes[0]
+        is_insight = "title" in sample
+
+        for node in nodes:
+            if is_insight:
+                print(f"[{node['id']}] {node['title']}")
+                print(f"     {node['insight']}")
+                print(f"     Context: {node['context']}")
+                meta = node.get("metadata", {})
+                if meta:
+                    print(f"     Metadata: {meta}")
+            else:
+                print(f"[{node['id']}] {node['observation']}")
+                meta = node.get("metadata", {})
+                if meta:
+                    print(f"     Metadata: {meta}")
+            print()
+
 
     async def _build_first_edges(self, grouped_obs: list, insights: list):
         """
         Build the edges for the first layer of the lattice.
+
+        Returns one result per insight (same order).  Failed items are
+        returned as BaseException instances so callers can skip them without
+        losing the rest of the batch.
         """
         edges = []
         for insight in insights:
@@ -114,41 +150,126 @@ class Lattice:
             session_observations = self._fmt_nodes(grouped_obs[sid], "observation")
             prompt = MAP_EVIDENCE_PROMPT.format(observations=session_observations, evidence=insight["supporting_evidence"])
             edges.append(self.evidence_model.call(prompt, resp_format=SupportingObservationsResponse))
-        edges = await batched_call(edges, max_concurrent=MAX_CONCURRENT)
-        return edges
-        
-    async def make_first_layer(self, separator: dict):
+        return await batched_call(edges, max_concurrent=MAX_CONCURRENT, return_exceptions=True)
+    
+    def make_observations(self):
+        """
+        Make observations for the interactions.
+        """
+        self.observations = self.observer.make_observations(self.interactions)
+        self.lattice["nodes"][0] = self.observations
+        self.current_layer = self.observations
+        self.layer_num = 1
+        self.num_nodes.append(len(self.observations))
+        return self.observations
+    
+    async def make_first_layer(self, separator: Separator):
         """
         Make the first layer of the lattice turning observations into insights.
         """
+        grouped_nodes = self._split_input(self.current_layer, separator)
 
-        if separator["type"] not in ["time", "observations", "sessions"]:
-            raise ValueError(f"Separator type {separator['type']} not supported")
-        else:
-            grouped_nodes = self._split_input(self.current_layer, separator)
-        
-        # Generate insights for each group of observations
-        print(f"Generating insights for {len(grouped_nodes)} groups of observations")
-        tasks = []
-        for group in grouped_nodes:
-            fmt_nodes = self._fmt_nodes(group, "observation")
-            input_prompt = OBSERVATION_TO_INSIGHT_PROMPT.format(user_name=self.name, observations=fmt_nodes, limit=MIN_INSIGHTS)
-            tasks.append(self.model.call(input_prompt))
-        raw_insights = await batched_call(tasks, max_concurrent=MAX_CONCURRENT)
+        # Stage 1: generate raw insights per group; failures are skipped rather than crashing
+        logger.info("Generating insights for %d groups of observations", len(grouped_nodes))
+        raw_results = await batched_call(
+            [
+                self.model.call(OBSERVATION_TO_INSIGHT_PROMPT.format(
+                    user_name=self.name,
+                    observations=self._fmt_nodes(group, "observation"),
+                    limit=MIN_INSIGHTS,
+                ))
+                for group in grouped_nodes
+            ],
+            max_concurrent=MAX_CONCURRENT,
+            return_exceptions=True,
+        )
 
-        print(f"Formatting insights")
-        format_tasks = []
-        for raw_insight in raw_insights:
-            format_tasks.append(self.model.call(FORMAT_INSIGHT_PROMPT.format(insights=raw_insight), Insights))
-        formatted_insights = await batched_call(format_tasks, max_concurrent=MAX_CONCURRENT)
+        valid_raw: list[tuple[int, str]] = []  # (original group index, raw text)
+        for sid, result in enumerate(raw_results):
+            if isinstance(result, BaseException):
+                logger.error("Insight generation failed for group %d, skipping: %s", sid, result)
+            else:
+                valid_raw.append((sid, result))
 
-        # Format the insights into a list of dicts
+        # Stage 2: format valid raw insights
+        logger.info("Formatting insights for %d groups", len(valid_raw))
+        formatted_results = await batched_call(
+            [self.model.call(FORMAT_INSIGHT_PROMPT.format(insights=raw), Insights) for _, raw in valid_raw],
+            max_concurrent=MAX_CONCURRENT,
+            return_exceptions=True,
+        )
+
         output_insights = []
         insight_id = 0
-        for sid, raw in enumerate(formatted_insights):
-            insights = Insights.model_validate(raw) if not isinstance(raw, Insights) else raw
+        for (sid, _), formatted in zip(valid_raw, formatted_results):
+            if isinstance(formatted, BaseException):
+                logger.error("Insight formatting failed for group %d, skipping: %s", sid, formatted)
+                continue
+            insights = Insights.model_validate(formatted) if not isinstance(formatted, Insights) else formatted
             for insight in insights.insights:
                 insight_dict = insight.model_dump()
+                insight_dict["id"] = insight_id
+                insight_dict["metadata"] = {"input_session": sid}
+                if "time" in grouped_nodes[sid][-1]["metadata"]:
+                    insight_dict["metadata"]["time"] = grouped_nodes[sid][-1]["metadata"]["time"]
+                output_insights.append(insight_dict)
+                insight_id += 1
+
+        # Stage 3: build edges; _build_first_edges returns exceptions in-place
+        logger.info("Building edges mapping observations to insights")
+        edges = await self._build_first_edges(grouped_nodes, output_insights)
+
+        for eid, edge in enumerate(edges):
+            if isinstance(edge, BaseException):
+                logger.warning("Edge mapping failed for insight %d, skipping: %s", output_insights[eid]["id"], edge)
+                continue
+            edge = SupportingObservationsResponse.model_validate(edge)
+            iid = output_insights[eid]["id"]
+            output_insights[eid]["merged"] = edge.supporting_ids
+            for supporting_id in edge.supporting_ids:
+                self.lattice["edges"][self.layer_num].append({"source": iid, "target": supporting_id})
+
+        logger.info("Number of nodes in layer %d: %d", self.layer_num, len(output_insights))
+        self.lattice["nodes"][self.layer_num] = output_insights
+        self.layer_num += 1
+        self.num_nodes.append(len(output_insights))
+        self.current_layer = output_insights
+        return output_insights
+    
+    async def make_layer(self, separator: Separator, input_layer: list = None):
+        """
+        Make subsequent layers of the lattice turning insights into new insights.
+        """
+        if self.layer_num < 2:
+            raise ValueError("Call make_first_layer first")
+
+        if input_layer is not None:
+            self.current_layer = input_layer
+
+        grouped_nodes = self._split_input(self.current_layer, separator)
+        
+        # Generate insights for each group of observations
+        logger.info(f"Generating insights for {len(grouped_nodes)} groups of insights")
+        tasks = []
+        for group in grouped_nodes:
+            fmt_nodes = self._fmt_nodes(group, "insight")
+            input_prompt = INSIGHT_SYNTHESIS_PROMPT.format(user_name=self.name, insights=fmt_nodes, limit=MIN_INSIGHTS)
+            tasks.append(self.model.call(input_prompt))
+        group_insights = await batched_call(tasks, max_concurrent=MAX_CONCURRENT, return_exceptions=True)
+
+        output_insights = []
+        insight_id = 0
+        for sid, insights in enumerate(group_insights):
+            if isinstance(insights, BaseException):
+                logger.error("Insight synthesis failed for group %d, skipping: %s", sid, insights)
+                continue
+            try:
+                insights = parse_model_json(insights)
+            except Exception as e:
+                logger.error(f"Error parsing insights: {e}")
+                insights = parse_model_json_with_fallback(insights, self.format_model, Insights)
+                insights = insights.model_dump()
+            for insight_dict in insights['insights']:
                 insight_dict["id"] = insight_id
                 insight_dict["metadata"] = {
                     "input_session": sid,
@@ -158,81 +279,17 @@ class Lattice:
                     insight_dict["metadata"]["time"] = grouped_nodes[sid][-1]["metadata"]["time"]
                 output_insights.append(insight_dict)
                 insight_id += 1
-
-        # Build the edges for the first layer
-        print(f"Building edges mapping observations to insights")
-        edges = await self._build_first_edges(grouped_nodes, output_insights)
-        print(edges)
-
-        for eid, edge in enumerate(edges):
-            edge = SupportingObservationsResponse.model_validate(edge)
-            output_insights[eid]["merged"] = edge.supporting_ids
-            insight_id = output_insights[eid]["id"]
-            for supporting_id in edge.supporting_ids:
-                self.lattice["edges"][self.layer_num].append({"source": insight_id, "target": supporting_id})
-
-        print(self.lattice["edges"][self.layer_num])
-
-        # Add the insights to the lattice
-        print(f"Number of nodes in layer {self.layer_num}: ", len(output_insights))
-        self.lattice["nodes"][self.layer_num] = output_insights 
-        self.layer_num += 1
-        self.num_nodes.append(len(output_insights))
-        self.current_layer = output_insights
-        return output_insights
-    
-    async def make_layer(self, separator: dict, input_layer: list = None):
-        """
-        Make subsequent layers of the lattice turning insights into new insights.
-        """
-        if input_layer is not None:
-            self.current_layer = input_layer
-
-        if separator["type"] not in ["time", "observations", "sessions"]:
-            raise ValueError(f"Separator type {separator['type']} not supported")
-        else:
-            grouped_nodes = self._split_input(self.current_layer, separator)
-        
-        # Generate insights for each group of observations
-        print(f"Generating insights for {len(grouped_nodes)} groups of insights")
-        tasks = []
-        for group in grouped_nodes:
-            fmt_nodes = self._fmt_nodes(group, "insight")
-            input_prompt = INSIGHT_SYNTHESIS_PROMPT.format(user_name=self.name, insights=fmt_nodes, limit=MIN_INSIGHTS)
-            tasks.append(self.model.call(input_prompt))
-        print(input_prompt)
-        group_insights = await batched_call(tasks, max_concurrent=MAX_CONCURRENT)
-        print(group_insights)
-
-        output_insights = []
-        insight_id = 0
-        for sid, insights in enumerate(group_insights):
-            try:
-                insights = parse_model_json(insights)
-            except Exception as e:
-                print(f"Error parsing insights: {e}")
-                insights = parse_model_json_with_fallback(insights, self.format_model, Insights)
-                insights = insights.model_dump()
-            for insight_dict in insights['insights']:
-                print(insight_dict)
-                insight_dict["id"] = insight_id
-                insight_dict["metadata"] = {
-                    "input_session": sid,
-                }
-                if "time" in grouped_nodes[sid][-1]["metadata"]:
-                    # inherit the time of the last node in the group
-                    insight_dict["metadata"]["time"] = grouped_nodes[sid][-1]["metadata"]["time"]
-                output_insights.append(insight_dict)
         
         # Add edges for the new insights
-        print(f"Building edges mapping insights to insights")
+        logger.info(f"Building edges mapping insights to insights")
         self.lattice["edges"][self.layer_num] = []
         for insight in output_insights:
-            for merged_id in insight["merged"]:
-                self.lattice["edges"][self.layer_num].append({"source": insight["id"], "target": merged_id})
+            if "merged" in insight and insight["merged"] is not None:
+                for merged_id in insight["merged"]:
+                    self.lattice["edges"][self.layer_num].append({"source": insight["id"], "target": merged_id})
 
         # Add the insights to the lattice
-        print(f"Number of nodes in layer {self.layer_num}: ", len(output_insights))
+        logger.info(f"Number of nodes in layer {self.layer_num}: ", len(output_insights))
         self.lattice["nodes"][self.layer_num] = output_insights 
         self.layer_num += 1
         self.num_nodes.append(len(output_insights))
@@ -240,5 +297,51 @@ class Lattice:
 
         return output_insights
     
+    async def build(self, config: list):
+        """
+        Build the lattice according to the config.
+        """
+        logger.info(f"Building lattice")
+        if self.observations is None:
+            logger.info(f"Making observations")
+            self.make_observations()
+        else:
+            logger.info(f"Observations loaded")
+
+        for layer in config:
+            logger.info(f"Building layer {self.layer_num}")
+            if layer == 0:
+                await self.make_first_layer(separator=layer)
+            else:
+                await self.make_layer(separator=layer)
+
+    def save(self, save_path: str = "lattice.json"):
+        """
+        Save the lattice to a file.
+        """
+        with open(save_path, "w") as f:
+            json.dump(self.lattice, f)
+    
+    def visualize(self, load_path: str | None = None):
+        """
+        Return an interactive Plotly figure of the lattice.
+
+        Nodes are arranged by layer on the y-axis and distributed evenly on the
+        x-axis.  Hover over any node to read its full text.  Call
+        ``fig.show()`` on the returned figure to open it in a browser, or pass
+        it directly to Dash / Streamlit.
+
+        Args:
+            load_path: Optional path to a saved lattice JSON file.  If given,
+                       the file is loaded and visualized instead of
+                       ``self.lattice``.
+        """
+        if load_path is not None:
+            with open(load_path, "r") as f:
+                to_diagram = json.load(f)
+        else:
+            to_diagram = self.lattice
+        visualizer = Visualizer(to_diagram)
+        return visualizer.basic_diagram()
 
     

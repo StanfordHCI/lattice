@@ -14,4 +14,5 @@ from Observer import Observer  # noqa: E402
 from AsyncLLM import AsyncLLM  # noqa: E402
 from SyncLLM import SyncLLM  # noqa: E402
 from Lattice import Lattice  # noqa: E402
+from models import Separator  # noqa: E402
 __version__ = "0.1.0"

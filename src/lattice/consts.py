@@ -14,7 +14,3 @@ MODEL_FAMILIES = {
     "qwen-235b-thinking": {"provider": "together", "name": "Qwen/Qwen3-235B-A22B-Thinking-2507","context_window": 220000},
     "qwen-3-80b": {"provider": "together", "name": "Qwen/Qwen3-Next-80B-A3B-Instruct","context_window": 220000},
 }
-
-WINDOW_SIZE = 10
-MAX_CONCURRENT = 100
-MIN_INSIGHTS = 3

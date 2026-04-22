@@ -64,24 +64,31 @@ async def call_anthropic(
 
     messages = [{"role": "user", "content": prompt}]
     if resp_format:
-        # Anthropic SDK accepts a string for system prompt instead of a message block.
+        # Force structured output via tool use: the model must call the tool,
+        # so its input is always validated against the Pydantic JSON schema.
         response = await client.messages.create(
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
             messages=messages,
-            output_format=resp_format,
+            tools=[{
+                "name": "structured_output",
+                "description": "Return the result in the required structured format.",
+                "input_schema": resp_format.model_json_schema(),
+            }],
+            tool_choice={"type": "tool", "name": "structured_output"},
         )
-        return response.parsed_output
-    else:
-        response = await client.messages.create(
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            messages=messages,
-        )
-
-    # Concatenate all text blocks in the response.
+        for block in response.content:
+            if getattr(block, "type", None) == "tool_use":
+                return resp_format.model_validate(block.input)
+        raise ValueError("Anthropic response did not include a tool_use block.")
+    
+    response = await client.messages.create(
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        messages=messages,
+    )
     parts = [
         block.text
         for block in response.content
@@ -183,11 +190,17 @@ async def call_together(client, prompt, model, resp_format=None):
 
 
 class AsyncLLM:
-    def __init__(self, name: str, api_key: str):
+    def __init__(self, name: str, api_key: str, provider: str | None = None):
         self.model_name = name
         if self.model_name not in MODEL_FAMILIES:
             raise ValueError(f"Model {self.model_name} not found")
-        self.provider = MODEL_FAMILIES[self.model_name]["provider"]
+        if provider is not None:
+            self.provider = provider
+        else:
+            try:
+                self.provider = MODEL_FAMILIES[self.model_name]["provider"]
+            except Exception as e:
+                raise ValueError(f"Provider for model {self.model_name} not found")
         self.client = self.setup_llm_fn(api_key)
         self._sem = asyncio.Semaphore(int(os.getenv("LLM_CONCURRENCY", "16")))
 

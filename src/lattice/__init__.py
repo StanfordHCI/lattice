@@ -15,4 +15,11 @@ from AsyncLLM import AsyncLLM  # noqa: E402
 from SyncLLM import SyncLLM  # noqa: E402
 from Lattice import Lattice  # noqa: E402
 from models import Separator  # noqa: E402
+
 __version__ = "0.1.0"
+
+# Per Python logging best practices for libraries: attach a NullHandler so
+# that log records are silently discarded unless the application configures
+# a handler.  Never call basicConfig or setLevel in library code.
+import logging
+logging.getLogger(__name__).addHandler(logging.NullHandler())

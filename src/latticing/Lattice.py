@@ -14,19 +14,28 @@ logger = logging.getLogger(__name__)
 
 
 class Lattice:
-    def __init__(self, name: str, interactions: list, description: str,
-    model: AsyncLLM, evidence_model: AsyncLLM, format_model: SyncLLM, observations: list | None = None, params: dict = {"max_concurrent": 100, "min_insights": 3, "window_size": 10}):
+    def __init__(self, 
+        name: str, 
+        interactions: list, 
+        description: str,
+        insight_model: AsyncLLM, 
+        observer_model: AsyncLLM,
+        evidence_model: AsyncLLM, 
+        format_model: SyncLLM, 
+        observations: list | None = None, 
+        params: dict = {"max_concurrent": 100, "min_insights": 3, "window_size": 10}
+    ):
         # set parameters
         self.max_concurrent = params["max_concurrent"] if "max_concurrent" in params else 100
         self.min_insights = params["min_insights"] if "min_insights" in params else 3
         self.window_size = params["window_size"] if "window_size" in params else 10
 
-        self.observer = Observer(name=name, model=model, format_model=format_model, description=description, params={"window_size": self.window_size, "max_concurrent": self.max_concurrent})
+        self.observer = Observer(name=name, model=observer_model, format_model=format_model, description=description, params={"window_size": self.window_size, "max_concurrent": self.max_concurrent})
 
         self.interactions = interactions
         self.name = name    
         self.lattice = {"nodes": {0: []}, "edges": {1: []}}
-        self.model = model
+        self.model = insight_model
         self.evidence_model = evidence_model
         self.format_model = format_model
 
@@ -149,6 +158,8 @@ class Lattice:
             return self._split_by_session(input_nodes, int(separator.value))
         elif separator.type == "number":
             return self._split_by_number(input_nodes, int(separator.value))
+        elif separator.type == "all":
+            return [input_nodes]
         else:
             raise ValueError(f"Separator type {separator.type!r} not supported")
     
@@ -323,9 +334,13 @@ class Lattice:
             try:
                 insights = parse_model_json(insights)
             except Exception as e:
-                logger.error(f"Error parsing insights: {e}")
-                insights = parse_model_json_with_fallback(insights, self.format_model, Insights)
-                insights = insights.model_dump()
+                logger.error("Error parsing insights for group %d: %s", sid, e)
+                try:
+                    insights = parse_model_json_with_fallback(insights, self.format_model, Insights)
+                    insights = insights.model_dump()
+                except Exception as e2:
+                    logger.error("FallWback parsing failed for group %d, skipping: %s", sid, e2)
+                    continue
             for insight_dict in insights['insights']:
                 insight_dict["id"] = insight_id
                 insight_dict["metadata"] = {
@@ -403,4 +418,21 @@ class Lattice:
         visualizer = Visualizer(to_diagram)
         return visualizer.basic_diagram()
 
-    
+    def visualize_widget(self, load_path: str | None = None):
+        """
+        Return an ipywidgets inspector for the last layer of the lattice.
+
+        Displays a scrollable list of nodes in the last layer on the left.
+        Selecting a node renders its full detail and all directly connected
+        nodes from the layer below on the right.
+
+        Args:
+            load_path: Optional path to a saved lattice JSON file.
+        """
+        if load_path is not None:
+            with open(load_path, "r") as f:
+                to_diagram = json.load(f)
+        else:
+            to_diagram = self.lattice
+        visualizer = Visualizer(to_diagram)
+        return visualizer.visualize_widget()

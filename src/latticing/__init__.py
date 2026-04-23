@@ -15,8 +15,9 @@ from AsyncLLM import AsyncLLM  # noqa: E402
 from SyncLLM import SyncLLM  # noqa: E402
 from Lattice import Lattice  # noqa: E402
 from models import Separator  # noqa: E402
+from Visualize import Visualizer  # noqa: E402
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # Per Python logging best practices for libraries: attach a NullHandler so
 # that log records are silently discarded unless the application configures

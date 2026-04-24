@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Behavior Lattice</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Inter","Helvetica Neue",sans-serif;background:#f8f8f6;color:#1a1a1a;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{padding:14px 24px;border-bottom:1px solid #e0e0e0;background:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px}
+header h1{font-size:1.1rem;font-weight:600;letter-spacing:-0.01em}
+#main{display:flex;flex:1;overflow:hidden}
+#canvas-area{flex:1;overflow:hidden;position:relative}
+#empty-state{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:.85rem;flex-direction:column;gap:10px;background:#f8f8f6}
+#plot{position:absolute;inset:0;display:none}
+#panel{width:340px;min-width:280px;border-left:1px solid #e0e0e0;background:#fff;overflow-y:auto;padding:20px 18px;flex-shrink:0}
+#panel.empty{display:flex;align-items:center;justify-content:center;color:#ccc;font-size:.82rem}
+#panel-content{display:none}
+#panel-content.visible{display:block}
+.ptag{display:inline-block;font-size:.68rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0047AB;background:#e8efff;padding:2px 8px;border-radius:4px;margin-bottom:8px}
+.ptag.l1{color:#555;background:#f2f2f0}
+.ptag.leaf{color:#888;background:#f2f2f0}
+.pbadge{display:inline-block;font-size:.67rem;font-weight:600;background:#f2f2f0;color:#777;padding:2px 7px;border-radius:4px;margin-left:5px}
+#panel h2{font-size:.9rem;font-weight:700;line-height:1.45;margin-bottom:8px;color:#111}
+.tagline{font-size:.79rem;font-style:italic;color:#666;line-height:1.55;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #eee}
+.slbl{font-size:.67rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin:12px 0 5px}
+.itext{font-size:.79rem;color:#333;line-height:1.6}
+.ctext{font-size:.76rem;color:#777;line-height:1.55;font-style:italic}
+.evlist{margin-top:6px;display:flex;flex-direction:column;gap:5px}
+.evitem{font-size:.73rem;color:#444;line-height:1.5;background:#f7f7f5;border-left:3px solid #ddd;padding:5px 8px;border-radius:0 4px 4px 0}
+.evitem strong{color:#aaa;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.chip{font-size:.7rem;background:#f2f2f0;color:#555;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid #e0e0e0;transition:background .1s}
+.chip:hover{background:#e0e7ff;border-color:#0047AB;color:#0047AB}
+</style>
+</head>
+<body>
+<header>
+  <h1>Behavior Lattice</h1>
+  <label for="file-input" style="cursor:pointer;font-size:.79rem;font-weight:600;color:#0047AB;background:#e8efff;padding:7px 16px;border-radius:6px;border:1.5px solid #b8ceff;white-space:nowrap">&#8593; Upload lattice.json</label>
+  <input type="file" id="file-input" accept=".json" style="display:none">
+</header>
+<div id="main">
+  <div id="canvas-area">
+    <div id="empty-state">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ddd" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>Upload a <code style="font-size:.82rem;background:#f5f5f3;padding:1px 5px;border-radius:3px">lattice.json</code> to begin</span>
+    </div>
+    <div id="plot"></div>
+  </div>
+  <div id="panel" class="empty">
+    <span>Click a node to explore</span>
+    <div id="panel-content"></div>
+  </div>
+</div>
+<script>
+let _data = null;
+
+function transformLatticeJSON(raw) {
+  const layerKeys = Object.keys(raw.nodes).map(Number).sort((a, b) => a - b);
+  const numLayers = layerKeys.length;
+
+  // Layer 0: observations
+  const leafRaw = raw.nodes[layerKeys[0]] || [];
+  const leafNodes = leafRaw.map(n => ({
+    id: n.id,
+    text: n.observation || n.text || '',
+    group: (n.metadata || {}).input_session || 0,
+    orig_id: n.id,
+  }));
+  const leafById = Object.fromEntries(leafNodes.map(n => [n.id, n]));
+
+  // edges[layer1]: source = l1 id, target = leaf id (higher -> lower)
+  const rawEdges1 = numLayers >= 2 ? (raw.edges[layerKeys[1]] || []) : [];
+  const edgesLeafL1 = rawEdges1.map(e => ({ from: e.target, to: e.source }));
+  const l1LeafMap = {};
+  edgesLeafL1.forEach(e => { (l1LeafMap[e.to] || (l1LeafMap[e.to] = [])).push(e.from); });
+
+  // Layer 1: per-session insights
+  const l1Raw = numLayers >= 2 ? (raw.nodes[layerKeys[1]] || []) : [];
+  const l1Nodes = l1Raw.map(n => ({
+    id: n.id, title: n.title || '', tagline: n.tagline || '',
+    insight: n.insight || '', context: n.context || '',
+    group: (n.metadata || {}).input_session || 0,
+    leaf_texts: (l1LeafMap[n.id] || []).map(lid => leafById[lid]?.text || '').filter(Boolean),
+  }));
+
+  // edges[layer2]: source = l2 id, target = l1 id
+  const rawEdges2 = numLayers >= 3 ? (raw.edges[layerKeys[2]] || []) : [];
+  const edgesL1L2 = rawEdges2.map(e => ({ from: e.target, to: e.source }));
+
+  // Layer 2: cross-session insights (may be absent)
+  const l2Raw = numLayers >= 3 ? (raw.nodes[layerKeys[2]] || []) : [];
+  const l2Nodes = l2Raw.map(n => {
+    const merged = (n.merged || []).map(m =>
+      typeof m === 'string' && m.includes('-') ? parseInt(m.split('-').pop(), 10) : Number(m)
+    );
+    return { id: n.id, title: n.title || '', tagline: n.tagline || '', insight: n.insight || '', context: n.context || '', merged };
+  });
+
+  return { leaf_nodes: leafNodes, l1_nodes: l1Nodes, l2_nodes: l2Nodes, edges_leaf_l1: edgesLeafL1, edges_l1_l2: edgesL1L2 };
+}
+
+function renderLattice(DATA) {
+  _data = DATA;
+  const { leaf_nodes, l1_nodes, l2_nodes, edges_leaf_l1, edges_l1_l2 } = DATA;
+  const hasL2 = l2_nodes.length > 0;
+
+  // x positions in [0, 1] per layer so nodes are never far apart
+  function xPos(nodes) {
+    const n = nodes.length;
+    if (n === 0) return {};
+    if (n === 1) return { [nodes[0].id]: 0.5 };
+    const r = {};
+    nodes.forEach((nd, i) => { r[nd.id] = i / (n - 1); });
+    return r;
+  }
+  const lx = xPos(leaf_nodes), l1x = xPos(l1_nodes), l2x = xPos(l2_nodes);
+
+  // Edge trace — null-separated segments
+  const ex = [], ey = [];
+  edges_leaf_l1.forEach(e => {
+    if (lx[e.from] == null || l1x[e.to] == null) return;
+    ex.push(lx[e.from], l1x[e.to], null);
+    ey.push(0, 1, null);
+  });
+  edges_l1_l2.forEach(e => {
+    if (l1x[e.from] == null || l2x[e.to] == null) return;
+    ex.push(l1x[e.from], l2x[e.to], null);
+    ey.push(1, 2, null);
+  });
+
+  function trunc(s, n) { return s && s.length > n ? s.slice(0, n) + '\u2026' : (s || ''); }
+
+  const traces = [
+    // Edges (drawn first, behind nodes)
+    {
+      x: ex, y: ey, mode: 'lines', type: 'scatter',
+      line: { color: '#dedede', width: 1 },
+      hoverinfo: 'none', showlegend: false,
+    },
+    // Observations
+    {
+      x: leaf_nodes.map(n => lx[n.id]),
+      y: leaf_nodes.map(() => 0),
+      mode: 'markers', type: 'scatter', name: 'Observations',
+      marker: { size: 10, color: '#bbbbbb' },
+      hovertext: leaf_nodes.map(n => `<b>Obs ${n.orig_id}</b><br>${trunc(n.text, 180)}`),
+      hoverinfo: 'text',
+      customdata: leaf_nodes.map(n => ['leaf', n.id]),
+    },
+    // Per-session insights
+    {
+      x: l1_nodes.map(n => l1x[n.id]),
+      y: l1_nodes.map(() => 1),
+      mode: 'markers', type: 'scatter', name: 'Per-Session Insights',
+      marker: { size: 13, color: '#ffffff', line: { color: '#555555', width: 2 } },
+      hovertext: l1_nodes.map(n => `<b>${trunc(n.title, 70)}</b><br>${trunc(n.insight, 180)}`),
+      hoverinfo: 'text',
+      customdata: l1_nodes.map(n => ['l1', n.id]),
+    },
+  ];
+
+  if (hasL2) {
+    traces.push({
+      x: l2_nodes.map(n => l2x[n.id]),
+      y: l2_nodes.map(() => 2),
+      mode: 'markers', type: 'scatter', name: 'Cross-Session Insights',
+      marker: { size: 15, color: '#1a1a1a' },
+      hovertext: l2_nodes.map(n => `<b>${trunc(n.title, 70)}</b><br>${trunc(n.insight, 180)}`),
+      hoverinfo: 'text',
+      customdata: l2_nodes.map(n => ['l2', n.id]),
+    });
+  }
+
+  const tickVals = [0, 1], tickText = ['Observations', 'L1 Insights'];
+  if (hasL2) { tickVals.push(2); tickText.push('L2 Insights'); }
+
+  const layout = {
+    showlegend: true,
+    hovermode: 'closest',
+    plot_bgcolor: '#ffffff',
+    paper_bgcolor: '#f8f8f6',
+    xaxis: { showgrid: false, zeroline: false, showticklabels: false, range: [-0.06, 1.06] },
+    yaxis: {
+      showgrid: true, gridcolor: '#f0f0ee', zeroline: false,
+      tickmode: 'array', tickvals: tickVals, ticktext: tickText,
+      range: [-0.5, (hasL2 ? 2 : 1) + 0.5],
+    },
+    margin: { l: 150, r: 20, t: 20, b: 20 },
+    hoverlabel: {
+      bgcolor: '#fff', bordercolor: '#e0e0e0',
+      font: { size: 12, family: 'Inter, Helvetica Neue, sans-serif' },
+      align: 'left', namelength: 0,
+    },
+    legend: { x: 1, xanchor: 'right', y: 1, bgcolor: 'rgba(255,255,255,0.85)', bordercolor: '#eee', borderwidth: 1 },
+  };
+
+  const config = {
+    responsive: true, scrollZoom: true,
+    displayModeBar: true,
+    modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
+    toImageButtonOptions: { format: 'png', filename: 'lattice' },
+  };
+
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('plot').style.display = 'block';
+  Plotly.newPlot('plot', traces, layout, config);
+
+  document.getElementById('plot').on('plotly_click', function(data) {
+    if (!data.points.length) return;
+    const pt = data.points[0];
+    if (!pt.customdata) return;
+    showPanel(pt.customdata[1], pt.customdata[0]);
+  });
+}
+
+function showPanel(id, type) {
+  if (!_data) return;
+  const { leaf_nodes, l1_nodes, l2_nodes, edges_leaf_l1 } = _data;
+  const panel = document.getElementById('panel');
+  const content = document.getElementById('panel-content');
+  panel.classList.remove('empty');
+
+  if (type === 'l2') {
+    const n = l2_nodes.find(x => x.id == id);
+    const chips = (n.merged || []).map(mid => {
+      const l1 = l1_nodes.find(x => x.id === mid);
+      return l1 ? `<span class="chip" data-id="${mid}" data-type="l1">${l1.title.substring(0, 42)}\u2026</span>` : '';
+    }).join('');
+    content.innerHTML = `<div class="ptag">Cross-Session Insight</div>
+      <h2>${n.title}</h2>
+      <p class="tagline">${n.tagline}</p>
+      <div class="slbl">Insight</div><p class="itext">${n.insight}</p>
+      <div class="slbl">Context</div><p class="ctext">${n.context}</p>
+      <div class="slbl">Merged from insights</div><div class="chips">${chips}</div>`;
+  } else if (type === 'l1') {
+    const n = l1_nodes.find(x => x.id === id);
+    const evHTML = (n.leaf_texts || []).slice(0, 5).map((t, i) =>
+      `<div class="evitem"><strong>Obs ${i + 1}</strong><br>${t.substring(0, 200)}${t.length > 200 ? '\u2026' : ''}</div>`
+    ).join('');
+    content.innerHTML = `<div class="ptag l1">L1 Insight</div><span class="pbadge">Session ${n.group}</span>
+      <h2 style="margin-top:8px">${n.title}</h2>
+      <p class="itext" style="margin-top:6px">${n.insight}</p>
+      <div class="slbl">Context</div><p class="ctext">${n.context}</p>
+      <div class="slbl">Evidence (${(n.leaf_texts || []).length} observations)</div>
+      <div class="evlist">${evHTML}</div>
+      ${(n.leaf_texts || []).length > 5 ? `<p style="font-size:.7rem;color:#bbb;margin-top:4px">+ ${n.leaf_texts.length - 5} more</p>` : ''}`;
+  } else if (type === 'leaf') {
+    const n = leaf_nodes.find(x => x.id === id);
+    const connL1 = edges_leaf_l1.filter(e => e.from === id).map(e => {
+      const l1 = l1_nodes.find(x => x.id === e.to);
+      return l1 ? `<span class="chip" data-id="${l1.id}" data-type="l1">${l1.title.substring(0, 42)}\u2026</span>` : '';
+    }).join('');
+    content.innerHTML = `<div class="ptag leaf">Observation</div><span class="pbadge">Session ${n.group} \u00b7 ID ${n.orig_id}</span>
+      <p class="itext" style="margin-top:10px">${n.text || ''}</p>
+      <div class="slbl">Assigned to insight(s)</div><div class="chips">${connL1}</div>`;
+  }
+
+  content.classList.add('visible');
+  content.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', e => {
+      e.stopPropagation();
+      showPanel(+chip.dataset.id, chip.dataset.type);
+    });
+  });
+}
+
+document.getElementById('file-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      renderLattice(transformLatticeJSON(JSON.parse(evt.target.result)));
+    } catch (err) {
+      alert('Failed to load lattice.json: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+</script>
+</body>
+</html>

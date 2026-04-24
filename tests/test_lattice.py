@@ -1,5 +1,5 @@
 import lattice
-from test_data import MOCK_OBSERVATIONS
+from test_data import MOCK_OBSERVATIONS, MOCK_INTERACTION_DATA
 import asyncio
 import os
 import yaml
@@ -13,18 +13,15 @@ async def test_lattice():
 
     l = lattice.Lattice(
         name="User",
-        observations=MOCK_OBSERVATIONS, 
-        model=lattice.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
-        evidence_model=lattice.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
-        format_model=lattice.SyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        interactions=MOCK_INTERACTION_DATA,
+        description="the user's actions and screen activities",
+        model=lattice.AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        evidence_model=lattice.AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        format_model=lattice.SyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
     )
 
-    for layer in config:
-        if layer == 0:
-            await l.make_first_layer(separator=config[layer])
-        else:
-            await l.make_layer(separator=config[layer])
-    l._save_lattice()
+    await l.build(config)
+    l.save(save_path="lattice.json")
     # await l.make_first_layer(separator={"type": "time", "value": "day"})
 
 async def test_edges():
@@ -76,8 +73,20 @@ async def test_edges():
     edges = await l._build_first_edges(MOCK_O, MOCK_I)
     print(edges)
 
+def test_visualize():
+    l = lattice.Lattice(
+        name="User",
+        interactions=MOCK_INTERACTION_DATA,
+        description="the user's actions and screen activities",
+        model=lattice.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        evidence_model=lattice.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        format_model=lattice.SyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+    )
+    fig = l.visualize(load_path="../examples/lattice.json")
+    fig.show()
+
 def test_version():
     assert lattice.__version__ == "0.1.0"
 
 if __name__ == "__main__":
-    asyncio.run(test_lattice())
+    test_visualize()

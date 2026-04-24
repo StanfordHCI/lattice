@@ -19,6 +19,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "tenacity>=9.1.2",
     "together>=2.9.0",
+    "tqdm>=4.0.0",
     "twine>=6.2.0",
 ]
 
@@ -35,11 +36,15 @@ path = "src/latticing/__init__.py"
 packages = ["src/latticing"]
 
 [tool.hatch.build.targets.sdist]
-include = [
-    "src/",
-    "README.md",
-    "LICENSE",
-    "pyproject.toml",
+exclude = [
+    "/website",
+    "/node_modules",
+    "/.venv",
+    "/.pytest_cache",
+    "/Agent_Aimer*",
+    "/docs",
+    "/examples",
+    "/tests"
 ]
 
 [tool.pytest.ini_options]

@@ -14,6 +14,8 @@ const config: Config = {
   url: 'https://stanfordhci.github.io',
   baseUrl: '/lattice',
 
+  staticDirectories: ['static'],
+
   organizationName: 'stanfordhci',
   projectName: 'lattice',
 

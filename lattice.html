@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Behavior Lattice</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f10;
+    --surface: #18181b;
+    --border: rgba(255,255,255,0.07);
+    --text-primary: rgba(255,255,255,0.92);
+    --text-secondary: rgba(255,255,255,0.8);
+    --text-dim: rgba(255,255,255,0.8);
+    --node: rgba(255,255,255,0.78);
+    --node-sel: #ffffff;
+    --node-nb: rgba(255,255,255,0.92);
+    --edge: rgba(255,255,255,0.065);
+    --edge-sel: rgba(255,255,255,0.5);
+    --glow: rgba(255,255,255,0.1);
+    --glow-sel: rgba(255,255,255,0.16);
+    --accent: #7F77DD;
+    --accent-soft: rgba(127,119,221,0.15);
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--sans);
+    height: 100%;
+    min-height: 100vh;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header h1 {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+  }
+
+  .layer-badges {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+    text-transform: uppercase;
+  }
+
+  .badge-obs { color: #7F77DD; border-color: rgba(127,119,221,0.3); background: rgba(127,119,221,0.08); }
+  .badge-l1  { color: #D85A30; border-color: rgba(216,90,48,0.3);  background: rgba(216,90,48,0.08); }
+  .badge-l2  { color: #1D9E75; border-color: rgba(29,158,117,0.3); background: rgba(29,158,117,0.08); }
+
+  #canvas-wrap {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  #hint {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+    transition: opacity 0.4s;
+  }
+
+  #panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #panel-header {
+    padding: 20px 20px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  #panel-layer {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  #panel-title {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  #panel-tagline {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  #panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  #panel-body::-webkit-scrollbar { width: 4px; }
+  #panel-body::-webkit-scrollbar-track { background: transparent; }
+  #panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .panel-empty {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-align: center;
+  }
+
+  .panel-empty svg {
+    opacity: 0.2;
+    margin-bottom: 8px;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    margin-top: 16px;
+  }
+
+  .section-label:first-child { margin-top: 0; }
+
+  .insight-text {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+  }
+
+  .observation-text {
+    font-size: 12px;
+    line-height: 1.6;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .evidence-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: rgba(255,255,255,0.7);
+  }
+
+  .evidence-list li {
+    font-size: 11px;
+    line-height: 1.55;
+    color: rgba(255,255,255,0.7);
+    padding-left: 12px;
+    position: relative;
+  }
+
+  .evidence-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 7px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  .conn-stat {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 10px 0 0;
+    border-top: 1px solid var(--border);
+    margin-top: 14px;
+  }
+
+  .conn-stat span {
+    color: var(--text-secondary);
+  }
+
+  #level-toggle {
+    display: flex;
+    gap: 6px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    margin-top: auto;
+  }
+
+  .toggle-btn {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 7px 0;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .toggle-btn:hover {
+    border-color: rgba(255,255,255,0.2);
+    color: var(--text-secondary);
+  }
+
+  .toggle-btn.active {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.18);
+    color: var(--text-primary);
+  }
+
+  @media (max-width: 700px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+    #panel { max-height: 260px; border-left: none; border-top: 1px solid var(--border); }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Behavior Lattice</h1>
+  </header>
+
+  <div id="canvas-wrap">
+    <canvas id="lc"></canvas>
+    <div id="hint">click any node to explore</div>
+  </div>
+
+  <div id="panel">
+    <div id="panel-header" style="display:none">
+      <div id="panel-layer"></div>
+      <div id="panel-title"></div>
+      <div id="panel-tagline"></div>
+    </div>
+    <div id="panel-body">
+      <div class="panel-empty">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="8" r="4" stroke="white" stroke-width="1.5"/>
+          <circle cx="8" cy="24" r="4" stroke="white" stroke-width="1.5"/>
+          <circle cx="24" cy="24" r="4" stroke="white" stroke-width="1.5"/>
+          <line x1="16" y1="12" x2="8" y2="20" stroke="white" stroke-width="1"/>
+          <line x1="16" y1="12" x2="24" y2="20" stroke="white" stroke-width="1"/>
+        </svg>
+        Select a node<br>to view details
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RAW = {
+  nodes: {"0": [{"id": 0, "observation": "The user is feeling frustrated and possibly losing confidence in ChatGPT's ability to solve their problem, as repeated suggestions have failed to produce the desired result in Overleaf.", "confidence": 7, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"id": 1, "observation": "Across multiple messages over two days, the user returns to ChatGPT saying 'nope this doesn't work' and 'nope that doesn't work' after trying each suggested LaTeX fix for coloring tables in Overleaf \u2014 indicating escalating frustration with the iterative failures.", "confidence": 7, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"id": 2, "observation": "The user is under some time pressure or has a specific formatting goal in mind, possibly for a paper submission, suggesting a results-oriented mindset rather than curiosity about LaTeX mechanics.", "confidence": 4, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"id": 3, "observation": "The user provides detailed, well-structured LaTeX code for academic tables (one referencing a codebook for a Hawaiian culture study, another with statistical test results) and repeatedly asks for quick fixes rather than explanations, implying they want a working solution fast.", "confidence": 4, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"id": 4, "observation": "The user is likely feeling frustrated or stuck when running into errors, as they keep hitting roadblocks (no tests collected, async test failures, missing modules) and quickly pasting error output to ChatGPT rather than troubleshooting independently.", "confidence": 5, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"id": 5, "observation": "Within a short session on 2025-11-18, the user pastes a 'no tests ran' output at 05:29, then an async error at 05:35, then sends a vague 'see output' and 'print output from pytest' at 05:37-05:38 \u2014 suggesting repeated stumbling blocks in quick succession while working on the 'needfinder' pytest setup.", "confidence": 5, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"id": 6, "observation": "The user appears to be iterating quickly and possibly feeling impatient or pressed for time, relying on ChatGPT as a live debugging partner rather than reading documentation themselves.", "confidence": 5, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"id": 7, "observation": "The user sends very short, telegraphic messages ('see output', 'print output from pytest', 'but looks weird in mkdocs', 'where in mkdocs do i specify which files to document') rather than detailed questions, suggesting they want fast answers and are moving through tasks rapidly.", "confidence": 5, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"id": 8, "observation": "The user may be feeling mildly uncertain or unfamiliar with the MkDocs + mkdocstrings toolchain, as they encounter multiple configuration issues (missing module, wrong rendering, unsure of nav config) over a short time span.", "confidence": 5, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"id": 9, "observation": "Between 05:57 and 07:04 on 2025-11-18 and continuing on 2025-11-20, the user asks about documentation automation, then immediately follows up with a 'ModuleNotFoundError' for 'mkdocstrings_handlers', then questions about why only one file appears, then about rendering of 'ReframedProblems', and finally where to specify files \u2014 indicating a sequential series of confusion points while setting up MkDocs for the 'needfinder' project.", "confidence": 5, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"id": 10, "observation": "The user appears to be actively building a Python package for the first time and is in a hands-on, iterative problem-solving mindset \u2014 encountering real errors, hitting walls, and working through them step by step rather than abandoning the task.", "confidence": 6, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"id": 11, "observation": "The user moves through a structured sequence in ChatGPT: first asking 'steps to building a python package,' then pasting actual terminal errors from the `needfinder` project (e.g., 'no tests ran,' 'FAILED tests/test_needfinder.py,' 'ModuleNotFoundError: No module named mkdocstrings_handlers'), and then asking increasingly specific follow-up questions about docs and docstrings.", "confidence": 6, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"id": 12, "observation": "The user may feel mild frustration or impatience when they send 'see output' and then 'print output from pytest' \u2014 they likely expected ChatGPT to have visibility into their terminal and were surprised or annoyed that it didn't.", "confidence": 5, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"id": 13, "observation": "The user sends two very terse messages \u2014 'see output' and 'print output from pytest' \u2014 with only seconds between them (05:37:37 and 05:38:00), suggesting they expected ChatGPT to already have access to their local environment output rather than needing to paste it.", "confidence": 5, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"id": 14, "observation": "The user is likely feeling a persistent sense of friction or dissatisfaction with the documentation setup, as small issues keep cropping up during the MkDocs configuration process.", "confidence": 5, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"id": 15, "observation": "After resolving the `mkdocstrings_handlers` error at 06:02, the user immediately follows up at 06:05 ('why is it only returning API for one of the python files in src') and then again at 06:08 ('but looks weird in mkdocs'), indicating a pattern of encountering and troubleshooting sequential obstacles in the `needfinder` project's MkDocs setup.", "confidence": 5, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"id": 16, "observation": "The user appears to be in a goal-oriented, productive mindset later in the day, returning to the project with a focused, forward-moving question about packaging with `uv` rather than continuing to debug earlier issues.", "confidence": 5, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"id": 17, "observation": "After a ~10-hour gap since the morning session, the user returns at 16:32 with a fresh, high-level question \u2014 'python make package with uv' \u2014 and then follows up with a direct quote from the assistant's earlier response ('if you want, I can show a concrete uv publish \u2192 TestPyPI example') to explicitly accept the offer, suggesting purposeful re-engagement with the `needfinder` packaging workflow.", "confidence": 5, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"id": 18, "observation": "User is likely in an active, problem-solving mindset, working through a multi-step technical workflow and feeling a mild sense of frustration or friction when things don't work as expected.", "confidence": 6, "metadata": {"input_session": 3, "time": "2025-11-14 21:58:57"}}, {"id": 19, "observation": "User progresses through a clear sequence of increasingly specific questions in ChatGPT \u2014 from 'where to include a demo of a python package,' to importing the package in a `.ipynb`, to pasting a `ModuleNotFoundError: No module named 'needfinder'` error \u2014 suggesting they are actively building something and hitting real blockers along the way.", "confidence": 6, "metadata": {"input_session": 3, "time": "2025-11-14 21:58:57"}}, {"id": 20, "observation": "User appears to be under some time pressure or working toward a concrete deliverable, moving quickly from one sub-problem to the next without lingering.", "confidence": 4, "metadata": {"input_session": 3, "time": "2025-11-14 21:58:57"}}, {"id": 21, "observation": "The gap between messages is short (e.g., 1 second between the first two messages, then ~25 minutes during debugging the 'needfinder' import error), and the user rapidly pivots to a new visualization task involving `ipywidgets` without resolving or confirming the prior import issue.", "confidence": 4, "metadata": {"input_session": 3, "time": "2025-11-14 21:58:57"}}, {"id": 22, "observation": "User is likely in a focused, execution-oriented state \u2014 not exploring conceptually but seeking ready-to-use code solutions to plug into their notebook.", "confidence": 6, "metadata": {"input_session": 3, "time": "2025-11-14 21:58:57"}}, {"id": 23, "observation": "Rather than asking conceptual questions, the user pastes raw data structures (a list of insight dicts, then a `ReframedProblems` object) directly into ChatGPT and requests `ipywidgets` visualizations, suggesting a 'get it done' mentality rather than curiosity-driven exploration.", "confidence": 6, "metadata": {"input_session": 3, "time": "2025-11-14 21:58:57"}}, {"id": 24, "observation": "User feels dissatisfied or mildly frustrated with the mythology-based suggestions from ChatGPT, and is redirecting back toward a more practical goal \u2014 finding a good package name.", "confidence": 6, "metadata": {"input_session": 4, "time": "2025-11-14 21:58:57"}}, {"id": 25, "observation": "After receiving an extensive mythology-themed response from ChatGPT, User quickly (within ~70 seconds) sends 'not mythology based. just better package names,' dismissing the entire mythology direction and re-anchoring the conversation.", "confidence": 6, "metadata": {"input_session": 4, "time": "2025-11-14 21:58:57"}}, {"id": 26, "observation": "User may feel uncertain or undecided about what they want, as they appear to be exploring loosely-defined criteria for naming rather than having a clear vision.", "confidence": 5, "metadata": {"input_session": 4, "time": "2025-11-14 21:58:57"}}, {"id": 27, "observation": "User's initial prompt to ChatGPT is open-ended ('what should i name it'), and when prompted with a follow-up direction ('what about mythology based'), they quickly abandon it \u2014 suggesting they are iterating without a firm idea of the target outcome.", "confidence": 5, "metadata": {"input_session": 4, "time": "2025-11-14 21:58:57"}}, {"id": 28, "observation": "The user is likely feeling frustrated or impatient after encountering an error with the generated code, and wants to move on quickly rather than debug a complex solution.", "confidence": 6, "metadata": {"input_session": 5, "time": "2025-11-14 21:58:57"}}, {"id": 29, "observation": "After receiving the full multi-file React app from ChatGPT, the user returns about 3 minutes later to report 'there is an error. it can be simpler just make sure it works,' explicitly requesting simplification rather than investigating the error details.", "confidence": 6, "metadata": {"input_session": 5, "time": "2025-11-14 21:58:57"}}, {"id": 30, "observation": "The user appears to be goal-oriented and outcome-focused \u2014 they want a working result in the canvas quickly, and are not interested in understanding or customizing the code deeply.", "confidence": 5, "metadata": {"input_session": 5, "time": "2025-11-14 21:58:57"}}, {"id": 31, "observation": "Rather than asking what caused the error or requesting a specific fix, the user sends a brief, directive message ('it can be simpler just make sure it works') and requested the canvas preview ('can you show it in the canvas') immediately after receiving a large code dump, suggesting they prioritize seeing a live result over reading through code.", "confidence": 5, "metadata": {"input_session": 5, "time": "2025-11-14 21:58:57"}}, {"id": 32, "observation": "The user appears to be in a focused, self-directed learning session on reinforcement learning concepts, methodically building understanding from foundational to more advanced topics.", "confidence": 6, "metadata": {"input_session": 6, "time": "2025-11-14 21:58:57"}}, {"id": 33, "observation": "Over roughly 16 minutes, the user sends a sequence of increasingly specific questions to ChatGPT \u2014 starting with a broad 'explain PPO to me,' then narrowing to 'ppo surrogate objective vs reward function,' then comparing 'ppo and grpo,' and finally asking to 'define advantage' \u2014 suggesting deliberate, structured exploration.", "confidence": 6, "metadata": {"input_session": 6, "time": "2025-11-14 21:58:57"}}, {"id": 34, "observation": "The user may have felt their first question about 'surrogate objective vs reward function' was misunderstood or too broad, prompting mild dissatisfaction or impatience with the initial response.", "confidence": 7, "metadata": {"input_session": 6, "time": "2025-11-14 21:58:57"}}, {"id": 35, "observation": "Only 16 seconds after sending 'ppo surrogate objective vs reward function,' the user resends a clarified version \u2014 'sorry ppo surrogate objective vs the reward' \u2014 suggesting the first answer did not land the way they intended and they felt the need to redirect ChatGPT.", "confidence": 7, "metadata": {"input_session": 6, "time": "2025-11-14 21:58:57"}}, {"id": 36, "observation": "The user seems to be actively trying to close specific conceptual gaps rather than passively reading, indicating a goal-oriented mindset \u2014 possibly preparing for a project, interview, or deeper study in RL or LLM fine-tuning.", "confidence": 5, "metadata": {"input_session": 6, "time": "2025-11-14 21:58:57"}}, {"id": 37, "observation": "The user's questions progress logically from PPO basics \u2192 surrogate objective \u2192 PPO vs. GRPO comparison \u2192 defining 'advantage,' each building on the last, reflecting deliberate knowledge construction rather than casual browsing in ChatGPT.", "confidence": 5, "metadata": {"input_session": 6, "time": "2025-11-14 21:58:57"}}, {"id": 38, "observation": "The user is likely under time pressure and working in a focused, task-completion mindset \u2014 they are actively drafting or finalizing an academic paper and need specific outputs quickly.", "confidence": 6, "metadata": {"input_session": 7, "time": "2025-11-14 21:58:57"}}, {"id": 39, "observation": "The user sends several short, telegraphic prompts to ChatGPT in rapid succession (e.g., 'spiral of silence bad for democratic discourse' at 23:40:06, 'spiral of silence echo chambers' at 23:40:19, 'citations of this' at 23:40:31 \u2014 all within roughly 25 seconds), suggesting they are iterating fast rather than deliberating.", "confidence": 6, "metadata": {"input_session": 7, "time": "2025-11-14 21:58:57"}}, {"id": 40, "observation": "The user appears to have a clear sense of the argument they want to make and is using ChatGPT instrumentally to fill in specific gaps \u2014 they are not exploring ideas openly, but rather assembling pre-planned pieces of their paper.", "confidence": 7, "metadata": {"input_session": 7, "time": "2025-11-14 21:58:57"}}, {"id": 41, "observation": "Rather than asking open-ended questions, the user provides their own outline text and specific in-progress sentences (e.g., 'Finish this sentence as to why we need to mitigate spiral of silence: As stated in Sec.~\\ref{sec:methods}...'), indicating they already know the structure and just need language or citations to complete it.", "confidence": 7, "metadata": {"input_session": 7, "time": "2025-11-14 21:58:57"}}, {"id": 42, "observation": "The user may feel mild uncertainty or self-doubt about the quality or completeness of their academic writing, prompting them to seek external validation or phrasing assistance rather than writing from scratch.", "confidence": 4, "metadata": {"input_session": 7, "time": "2025-11-14 21:58:57"}}, {"id": 43, "observation": "The user asks ChatGPT to convert their rough outline into polished prose and provides a writing style example ('Follow my writing style (example below)'), suggesting they want the output to match a standard they are uncertain they can consistently hit on their own.", "confidence": 4, "metadata": {"input_session": 7, "time": "2025-11-14 21:58:57"}}, {"id": 44, "observation": "The user appears to be in an active, goal-oriented building session \u2014 moving quickly from concept to implementation without much hesitation or backtracking.", "confidence": 6, "metadata": {"input_session": 8, "time": "2025-11-14 21:58:57"}}, {"id": 45, "observation": "The user sends short, direct follow-up messages in rapid succession: 'launch it when microphone starts' (23:23), 'give me step-by-step instructions for 2.1' (23:27), and 'how would i ship my electron app with micwwatcher' (23:28) \u2014 each within 1\u20134 minutes of the previous response.", "confidence": 6, "metadata": {"input_session": 8, "time": "2025-11-14 21:58:57"}}, {"id": 46, "observation": "The user may be slightly rushed or typing in a hurry, not pausing to proofread their messages.", "confidence": 5, "metadata": {"input_session": 8, "time": "2025-11-14 21:58:57"}}, {"id": 47, "observation": "In their final message at 23:28, the user types 'micwwatcher' (a typo for 'MicWatcher'), suggesting they are moving quickly through the conversation without reviewing what they've written.", "confidence": 5, "metadata": {"input_session": 8, "time": "2025-11-14 21:58:57"}}, {"id": 48, "observation": "The user appears to be following a linear, step-by-step learning path \u2014 consuming each answer and immediately drilling into the next concrete action needed, suggesting focused execution rather than exploratory curiosity.", "confidence": 6, "metadata": {"input_session": 8, "time": "2025-11-14 21:58:57"}}, {"id": 49, "observation": "Rather than asking broad or clarifying questions, the user progressively narrows scope: first asking about the overlay in **Electron**, then system mic detection, then specifically requesting step-by-step instructions for the **Swift MicWatcher** helper (2.1), then immediately asking how to bundle **MicWatcher** with their **Electron** app via **electron-builder**.", "confidence": 6, "metadata": {"input_session": 8, "time": "2025-11-14 21:58:57"}}, {"id": 50, "observation": "User is likely in an active, task-focused workflow \u2014 iterating quickly on a data visualization problem in R/ggplot2, suggesting they are working under some time pressure or trying to get a result working efficiently.", "confidence": 4, "metadata": {"input_session": 9, "time": "2025-11-14 21:58:57"}}, {"id": 51, "observation": "User rapidly moves through multiple distinct ggplot2 topics in sequence \u2014 boxplots (22:10), raincloud plots (22:12), removing dots (22:15), forest plots (22:16), and error bar caps (22:39) \u2014 with very short gaps between messages in ChatGPT.", "confidence": 4, "metadata": {"input_session": 9, "time": "2025-11-14 21:58:57"}}, {"id": 52, "observation": "User may be feeling mild frustration or confusion when their initial boxplot attempt did not produce the expected result.", "confidence": 5, "metadata": {"input_session": 9, "time": "2025-11-14 21:58:57"}}, {"id": 53, "observation": "After receiving boxplot code from ChatGPT, the user returns at 22:11 to report 'gives me one big boxplot though,' indicating the code did not work as expected and prompting a follow-up troubleshooting message.", "confidence": 5, "metadata": {"input_session": 9, "time": "2025-11-14 21:58:57"}}, {"id": 54, "observation": "User appears to have a clear visual goal in mind and is making targeted, precise refinements to their plot rather than exploring broadly, suggesting confidence in what they want.", "confidence": 5, "metadata": {"input_session": 9, "time": "2025-11-14 21:58:57"}}, {"id": 55, "observation": "After receiving the full raincloud plot code at 22:12, the user sends only 'remove the dots' at 22:15 \u2014 a concise, directive request \u2014 rather than asking for explanation or alternatives, indicating they know exactly what change they want.", "confidence": 5, "metadata": {"input_session": 9, "time": "2025-11-14 21:58:57"}}], "1": [{"title": "ChatGPT as a Real-Time Co-Pilot: The Broken Mental Model", "tagline": "The user treats ChatGPT like a pair-programming partner who can see their screen, and friction spikes when that illusion breaks.", "insight": "The user operates under an implicit assumption that ChatGPT functions like a co-located pair-programming partner with shared visibility into their terminal, editor, and rendered output. When this mental model breaks \u2014 for example, when ChatGPT cannot \"see\" their pytest output or MkDocs rendering \u2014 it creates compounding friction on top of existing frustration. This mismatch between expectation and reality leads to terse, context-free messages that assume shared environmental awareness. The pattern suggests the user's natural interaction style is optimized for synchronous, co-located collaboration rather than asynchronous, text-based assistance.", "context": "This insight applies when the user is actively debugging or working in a development environment and expects the AI to interpret raw outputs and environmental context without explicit description.", "supporting_evidence": ["In IDs 12 and 13, the user sends 'see output' and then 'print output from pytest' only 23 seconds apart, strongly suggesting they expected ChatGPT to already have visibility into their local terminal and were surprised when it didn't.", "In ID 7, telegraphic messages like 'but looks weird in mkdocs' and 'where in mkdocs do i specify which files to document' are phrased as one would speak to someone sitting next to them looking at the same screen, not as self-contained questions to a remote assistant.", "In ID 4, the user pastes raw error output rather than describing the problem, reinforcing the expectation that ChatGPT can interpret their environment as a co-located partner would."], "merged": [4, 7, 12, 13], "id": 0, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Whack-a-Mole Debugging: Cascading Failures Erode Trust", "tagline": "The user's frustration stems not from a single failure but from an unpredictable chain of new problems surfacing after each suggested fix, making the tool feel unreliable.", "insight": "Each time the user applies a suggested solution, a different and unexpected problem surfaces, creating a whack-a-mole pattern that drives an emotional arc from engagement to frustration to diminishing confidence. The issue is not that individual solutions are necessarily wrong, but that the sequential cascade of new obstacles prevents the user from ever feeling like they are converging on resolution. This pattern \u2014 fix, new problem, fix, new problem \u2014 erodes trust in the tool's reliability even when each individual answer may be technically correct. Over time, this makes the user feel like ChatGPT is generating more work rather than reducing it.", "context": "This insight applies when the user is troubleshooting technical issues across sessions, particularly when solutions involve multi-step configurations like LaTeX rendering, MkDocs setup, or pytest execution.", "supporting_evidence": ["In ID 1, over two days the user returns repeatedly saying 'nope this doesn't work' and 'nope that doesn't work' after trying LaTeX fixes \u2014 each attempt introduces a new failure rather than converging on a solution.", "In IDs 9 and 15, during MkDocs setup the user encounters a ModuleNotFoundError, then discovers only one file is documented, then the rendering 'looks weird,' then they don't know where to specify files \u2014 four distinct sequential problems within roughly an hour.", "In ID 5, within the pytest session the user hits 'no tests ran,' then an async error, then confusion about output \u2014 three different problems in rapid succession within 9 minutes.", "In ID 0, the user's declining confidence in ChatGPT is a downstream effect of this pattern: the tool isn't failing at any one thing, but the repeated cycle of fix-then-new-problem makes it feel unreliable."], "merged": [0, 1, 5, 9, 15], "id": 1, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Two Cognitive Modes: Reactive Debugging vs. Strategic Planning", "tagline": "The user toggles between rapid-fire, emotionally charged debugging and calm, deliberate strategic re-engagement \u2014 each mode demands a fundamentally different interaction approach.", "insight": "The user's interaction pattern reveals two sharply different cognitive states. In 'debugging mode' during morning sessions, they are reactive, impatient, and emotionally frustrated, firing off terse messages and expecting instant, working answers. In 'planning mode' after returning from a break, they are calm, purposeful, and forward-looking, asking structured questions and referencing prior conversation context. These two modes have dramatically different needs: debugging mode requires fast, concrete, working solutions with minimal explanation, while planning mode benefits from structured walkthroughs and broader guidance.", "context": "This insight applies when interpreting the user's tone and message style to calibrate the appropriate depth, pacing, and format of responses \u2014 especially when distinguishing between time-pressured debugging sessions and deliberate learning or planning sessions.", "supporting_evidence": ["In IDs 16 and 17, after a roughly 10-hour gap, the user returns with a clean, high-level question ('python make package with uv') and deliberately accepts a previously offered walkthrough by quoting it back, showing strategic and composed engagement \u2014 a stark contrast to the morning's frantic debugging.", "In IDs 5 and 6, during the morning session messages come seconds apart, the user pastes raw errors without context, and there is a strong sense of impatience and time pressure \u2014 a completely different emotional and cognitive state.", "In IDs 2 and 3, the LaTeX interactions reflect debugging mode \u2014 the user wants a 'quick fix' and is results-oriented, not curious about underlying mechanics, operating in a shipping mindset rather than a learning mindset.", "In IDs 10 and 11, the user does follow a structured learning sequence at the macro level (asking for steps, encountering errors, asking follow-ups), but each micro-interaction in the moment feels chaotic and reactive."], "merged": [16, 17, 5, 6, 2, 3, 10, 11], "id": 2, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Vending Machine Mentality with AI", "tagline": "The user treats AI as a dispenser of ready-to-use code rather than a collaborative partner, creating frustrating cycles when outputs don't work immediately.", "insight": "The user consistently pastes raw data, errors, or brief directives and expects ready-to-use outputs in return, without engaging with the code conceptually or debugging alongside the AI. This transactional approach means that when the AI produces something broken or overly complex, the user lacks the scaffolding to diagnose or adapt it. The result is repeated cycles of requesting output, finding it broken, asking for something simpler, and requesting again. This pattern undermines the collaborative potential of AI-assisted development.", "context": "This insight applies when the user is working on coding or technical tasks with AI assistance, particularly when building visualizations, debugging errors, or integrating code into notebooks.", "supporting_evidence": ["The user pastes raw data structures and requests ipywidgets visualizations rather than describing what they want conceptually (ID: 23).", "Rather than investigating an error themselves, the user says 'it can be simpler just make sure it works' (ID: 29), showing a reliance on the AI to fix issues without personal engagement.", "The user prioritizes seeing a live canvas result over reading through code (ID: 31) and is described as 'seeking ready-to-use code solutions to plug into their notebook' (ID: 22)."], "merged": [23, 29, 31, 22], "id": 3, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"title": "Momentum Over Thoroughness", "tagline": "The user rapidly pivots between tasks, sacrificing thoroughness for forward momentum and potentially compounding unresolved problems downstream.", "insight": "There is a striking tension between the user's speed of movement and the completeness of their work. They jump from one sub-problem to the next without confirming that prior issues are actually resolved. This forward momentum feels productive in the moment but may be creating hidden technical debt or fragile foundations. Abandoned problems and unresolved errors accumulate silently as the user pushes ahead.", "context": "This insight applies when the user is working through multi-step technical workflows under time pressure, especially when encountering blockers or errors during development.", "supporting_evidence": ["The user rapidly pivots to a new visualization task involving ipywidgets without resolving or confirming the prior needfinder import error (ID: 21).", "A roughly 25-minute gap during debugging followed by an abrupt topic change suggests the user may have abandoned rather than solved the problem (ID: 21).", "The user moves quickly from one sub-problem to the next without lingering (ID: 20) and progresses through increasingly specific questions, hitting real blockers along the way (ID: 19)."], "merged": [19, 20, 21], "id": 4, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"title": "Reactive Preference Discovery", "tagline": "The user defines their preferences by rejecting what they don't want rather than articulating what they do want, operating as a filter on outputs rather than a generative force for inputs.", "insight": "Across multiple domains \u2014 naming, code complexity, creative direction \u2014 the user cannot articulate criteria upfront but instantly recognizes when something is wrong. When naming a package, they couldn't specify what they wanted but immediately rejected mythology-based names. When receiving code, they couldn't define the right complexity level but knew when it was too much. Their creative and technical judgment operates primarily through reactive rejection rather than proactive specification.", "context": "This insight applies when the user is engaged in creative or open-ended tasks such as naming, design decisions, or specifying requirements for code and projects.", "supporting_evidence": ["The user's initial prompt is open-ended ('what should i name it'), and when given a mythology direction, they abandon it within approximately 70 seconds (ID: 25, 27).", "The user appears to be exploring loosely-defined criteria for naming rather than having a clear vision (ID: 26) and dismisses the entire mythology direction with a brief corrective rather than explaining what they do want (ID: 24, 25).", "When receiving code, the user doesn't specify what 'simpler' means \u2014 they only know the current output is too complex (ID: 29)."], "merged": [24, 25, 26, 27, 29], "id": 5, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"title": "Complexity as Obstacle Under Time Pressure", "tagline": "Time pressure transforms the user's relationship with detailed AI responses, turning comprehensive help into a source of friction rather than a resource.", "insight": "There is a fundamental mismatch between what the AI offers \u2014 comprehensive, detailed, multi-file solutions \u2014 and what the user can absorb given their time constraints and execution-oriented mindset. The more thorough and elaborate the AI's response, the more friction the user experiences. Paradoxically, the AI's attempt to be maximally helpful becomes the primary source of the user's frustration. Rich, detailed responses feel like obstacles to overcome rather than resources to leverage.", "context": "This insight applies when the user is working under time pressure toward a concrete deliverable and needs quick, actionable outputs rather than thorough explanations or elaborate solutions.", "supporting_evidence": ["After receiving an extensive mythology-themed response, the user dismisses it within approximately 70 seconds (ID: 25), indicating that elaborate responses create friction rather than value.", "After receiving a full multi-file React app, the user returns to say 'it can be simpler just make sure it works' (ID: 29), explicitly rejecting the comprehensiveness of the output.", "The user is described as being under time pressure, working toward a concrete deliverable (ID: 20), and feels frustrated when things don't work as expected within their multi-step workflow (ID: 18, 28)."], "merged": [18, 20, 25, 28, 29], "id": 6, "metadata": {"input_session": 1, "time": "2025-11-14 21:58:57"}}, {"title": "ChatGPT as an Assembly Tool, Not a Thinking Partner", "tagline": "The user arrives with a pre-formed mental model and uses ChatGPT to fill precise execution gaps rather than to explore or discover new ideas.", "insight": "The user consistently treats ChatGPT as a last-mile execution tool rather than a collaborative thinking partner. They arrive at each session with a clear plan already formed in their head and use the AI to fill in specific gaps \u2014 whether that's polished prose, a precise definition, or step-by-step build instructions. This reflects a user who is highly capable of independent reasoning but delegates the finishing work to AI. The fundamental tension is that their strong self-direction means they rarely leverage ChatGPT's capacity for open-ended exploration or creative divergence.", "context": "This insight applies broadly across learning, writing, and coding sessions \u2014 any time the user engages ChatGPT with a task that has a clear deliverable or a known endpoint they are working toward.", "supporting_evidence": ["In the RL learning session, questions build in a deliberate, pre-planned sequence (ID: 37), indicating the user had mapped out what they needed to learn before engaging.", "In the academic writing session, the user provides their own outline and in-progress sentences for ChatGPT to complete (ID: 41), showing they use AI to finish work they've already substantially started.", "In the Electron app session, the user progressively narrows scope toward the exact implementation step they need (ID: 49), confirming a pattern of using ChatGPT to execute against a pre-existing plan rather than to brainstorm or explore."], "merged": [37, 41, 49], "id": 7, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"title": "Speed Creates a Fragile Feedback Loop Prone to Compounding Errors", "tagline": "The user's extremely high operating velocity means that miscommunications are costly, triggering impatient corrections that can paradoxically slow them down.", "insight": "The user operates at remarkably high speed, sending multiple prompts within seconds of each other and firing off immediate corrections when responses miss the mark. This pace introduces typos, telegraphic shorthand, and hurried follow-ups that can compound misunderstandings. The very efficiency-seeking behavior that makes them productive also makes them more vulnerable to a cascading cycle of miscommunication. When a response doesn't land, the user's impatience leads to even more rushed prompts, creating a fragile feedback loop where one misinterpreted prompt can derail an entire exchange.", "context": "This insight is most relevant during fast-paced, multi-prompt sessions where the user is iterating quickly on a task \u2014 especially in technical or coding contexts where precision matters and a wrong response wastes significant time.", "supporting_evidence": ["The user sent 25 seconds across three prompts in rapid succession (ID: 39), and in another instance sent a correction only 16 seconds after the original prompt (ID: 35), demonstrating extremely high operating velocity.", "Typos appear in the user's prompts (ID: 47) alongside telegraphic shorthand, indicating that speed compromises clarity in their communication with ChatGPT.", "The user displays visible impatience when responses don't match expectations (ID: 34), triggering hurried follow-ups (ID: 45, 46) that risk further compounding the misunderstanding rather than resolving it."], "merged": [34, 35, 39, 45, 46, 47], "id": 8, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"title": "Oscillation Between Competence and Self-Doubt Drives AI as a Confidence Bridge", "tagline": "Despite deep domain competence, the user turns to ChatGPT for validation and finishing touches, revealing self-doubt not about understanding but about meeting their own high quality bar.", "insight": "The user demonstrates a striking contradiction: they possess deep competence across multiple domains \u2014 structuring RL learning paths, writing academic papers with LaTeX, and building Electron apps with native Swift helpers \u2014 yet repeatedly turn to ChatGPT for validation and polishing. Their self-doubt is not about whether they understand the material but about whether their output meets an internalized quality standard. This suggests the user has absorbed high expectations, possibly from academic or professional environments, and uses AI as a confidence bridge between draft-quality thinking and publication-quality expectations. ChatGPT effectively serves as a quality assurance layer that lets the user produce work they feel meets their own exacting bar.", "context": "This insight applies when the user is producing high-stakes output such as academic writing, professional documentation, or any deliverable where they hold themselves to a polished, publication-ready standard.", "supporting_evidence": ["The user provides a writing style example because they are uncertain they can consistently hit that standard on their own (ID: 43), revealing self-doubt about output quality rather than conceptual understanding.", "In the academic writing session, the user asks ChatGPT to 'finish this sentence' rather than writing it themselves (ID: 41), despite clearly understanding the content well enough to have drafted most of the paper.", "Across sessions (ID: 36, 42), the user's questions reflect someone who already knows the answer but seeks external confirmation, using ChatGPT as a validation mechanism for work they've substantially completed."], "merged": [36, 41, 42, 43], "id": 9, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"title": "Knowledge Construction Through Narrowing, Not Broadening", "tagline": "The user learns by systematically constraining the problem space rather than expanding it, employing convergent thinking that is efficient but risks missing important adjacent concepts.", "insight": "Across all observed sessions, the user follows a distinctive pattern of starting with a moderately scoped question and then systematically narrowing rather than broadening their inquiry. This convergent approach is the opposite of exploratory curiosity \u2014 the user drills down into specifics rather than asking 'what else should I consider.' The strategy is highly efficient when the user's mental model is correct, as it rapidly zeroes in on exactly the knowledge they need. However, it carries the risk of missing important adjacent concepts or alternative approaches that a more exploratory style might uncover.", "context": "This insight applies whenever the user is learning new material or working through a complex technical problem \u2014 situations where the breadth of the solution space is uncertain and adjacent knowledge could prove valuable.", "supporting_evidence": ["In the RL learning session, the user moves from 'explain PPO' to surrogate objective vs. reward, then to PPO vs. GRPO, and finally to 'define advantage' (ID: 33, 37), demonstrating a clear narrowing trajectory through increasingly specific sub-concepts.", "In the Electron app session, the user progresses from the overlay concept to mic detection, then to a specific Swift helper, and finally to bundling with electron-builder (ID: 49), following the same convergent pattern of systematically constraining scope.", "In the academic writing session (ID: 40), the user similarly narrows from broad structural questions to specific sentence-level completions, never diverging to explore alternative framings or structures for their paper."], "merged": [33, 37, 49, 40], "id": 10, "metadata": {"input_session": 2, "time": "2025-11-14 21:58:57"}}, {"title": "AI as Execution Tool, Not Learning Resource", "tagline": "The user treats AI as a real-time coding collaborator to execute their vision, not as a teacher to build understanding.", "insight": "The user never asks 'why' something works or requests explanations of the code. They issue terse directives and report symptoms rather than seeking conceptual understanding. They have strong design intent but rely on the AI to translate that intent into code, meaning any friction in the translation loop directly blocks their progress. The AI serves as an extension of their own hands \u2014 a tool to execute faster.", "context": "When the user is writing or debugging code, or when they provide terse, directive instructions expecting immediate working output rather than explanations.", "supporting_evidence": ["When the boxplot didn't work (ID: 53), the user reported the symptom ('gives me one big boxplot though') rather than asking what went wrong conceptually.", "The user issued terse directives like 'remove the dots' (ID: 55), showing they want execution, not discussion.", "Across interactions (IDs 50, 54), the user consistently provided targeted instructions without ever requesting an explanation of underlying logic."], "merged": [53, 55, 50, 54], "id": 11, "metadata": {"input_session": 3, "time": "2025-11-14 21:58:57"}}, {"title": "Assembling a Unified Deliverable, Not Exploring", "tagline": "The user's rapid topic-switching across plot types reflects systematic assembly of a coherent design vision, not scattered exploration.", "insight": "Jumping from boxplots to raincloud plots to forest plots to error bar caps in under 30 minutes appears scattered, but the user's precise, targeted refinements and clear visual goals reveal a different picture. The user likely has a specific figure or set of figures fully imagined and is systematically building each component. The contradiction between apparent breadth and actual depth suggests they are working toward a defined deliverable, possibly a publication figure or presentation.", "context": "When the user rapidly switches between visualization types or plot components, especially when each switch is accompanied by precise design specifications.", "supporting_evidence": ["The user jumped across boxplots, raincloud plots, forest plots, and error bar caps within a very short timeframe (ID: 51), suggesting sub-elements of one unified task.", "Their precise, targeted refinements (ID: 54) and clear visual goals indicate a pre-formed design vision rather than open-ended exploration.", "The combination of specific directives (ID: 55) and rapid pacing (ID: 50) points to assembly of a defined deliverable rather than experimentation."], "merged": [51, 54, 55, 50], "id": 12, "metadata": {"input_session": 3, "time": "2025-11-14 21:58:57"}}, {"title": "Disproportionate Cost of Small Code Failures", "tagline": "Even minor code output failures carry outsized emotional and workflow costs, breaking the user's momentum and creative flow.", "insight": "The user operates under time pressure in a fast iteration loop where gaps between topics are measured in minutes. A single code misfire requires a follow-up message, a wait for a response, and re-execution, disrupting a workflow built on rapid, directive back-and-forth. Each code failure doesn't just cost time \u2014 it breaks the user's sense of momentum and creative flow. This is especially significant because the user's entire interaction model depends on maintaining unbroken rapid iteration.", "context": "When generating code output for the user, especially during fast-paced iterative sessions where the user is building or refining visualizations under time pressure.", "supporting_evidence": ["When the boxplot produced 'one big boxplot' instead of grouped boxplots (ID: 53), this single misfire required a follow-up message, a wait, and re-execution.", "The user showed mild frustration (ID: 52) that likely compounds across iterations in their fast-paced workflow.", "The rapid pacing of the session (ID: 50, 51) \u2014 with topics switching in minutes \u2014 means even one broken loop iteration undermines the entire directive back-and-forth interaction model."], "merged": [50, 51, 52, 53], "id": 13, "metadata": {"input_session": 3, "time": "2025-11-14 21:58:57"}}], "2": [{"title": "AI as an Execution Layer, Not a Collaborator", "tagline": "The user treats ChatGPT as a last-mile assembly tool for translating pre-formed intentions into polished output, not as a thinking partner for exploration or learning.", "insight": "Across coding, writing, and learning sessions, the user arrives with clear plans and uses ChatGPT to fill specific gaps \u2014 polished prose, working code, precise definitions \u2014 rather than engaging in open-ended exploration or asking 'why' something works. They issue terse directives and report symptoms rather than seeking conceptual understanding, treating the AI as an extension of their own hands. This highly self-directed approach means they rarely leverage ChatGPT's capacity for creative divergence or deeper explanation. The fundamental risk is that when the AI's output breaks, the user lacks the scaffolding to diagnose or adapt it independently, creating a dependency that undermines resilience.", "context": "Applies broadly across all task types \u2014 coding, writing, visualization, and learning \u2014 whenever the user engages ChatGPT with a clear deliverable or known endpoint, and especially when they paste raw data or errors expecting ready-to-use outputs.", "merged": [3, 7, 11], "supporting_evidence": "The user consistently pastes raw errors expecting fixes (insight 3), arrives with pre-formed plans and delegates finishing work (insight 7), and never asks 'why' or requests explanations (insight 11). All three converge on a transactional, execution-oriented relationship with AI.", "id": 0, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Speed-Optimized Workflow Creates Fragile Momentum", "tagline": "The user's relentless forward momentum and rapid iteration pace make them highly productive but dangerously vulnerable to compounding errors and hidden technical debt.", "insight": "The user operates at remarkable speed, sending multiple prompts within seconds and jumping from one sub-problem to the next without confirming prior issues are resolved. This forward momentum feels productive but creates a fragile feedback loop: typos, telegraphic shorthand, and rushed follow-ups compound misunderstandings, while abandoned problems and unresolved errors accumulate silently. When a single code misfire occurs, it doesn't just cost time \u2014 it breaks the user's sense of creative flow, which is disproportionately costly because their entire interaction model depends on maintaining unbroken rapid iteration. The paradox is that the very efficiency-seeking behavior that drives their productivity also makes them most vulnerable to cascading failures.", "context": "Applies during fast-paced, multi-prompt technical sessions \u2014 especially when building visualizations, debugging code, or iterating on any deliverable under time pressure.", "merged": [4, 8, 13], "supporting_evidence": "The user jumps between sub-problems without confirming resolution (insight 4), fires off rapid corrections that compound miscommunication (insight 8), and experiences disproportionate disruption from small code failures during fast iteration loops (insight 13). All three describe facets of the same speed-driven fragility.", "id": 1, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Cascading Fix Cycles Erode Trust and Amplify Frustration", "tagline": "Sequential solutions that each introduce new problems create a whack-a-mole pattern that makes the user feel ChatGPT is generating work rather than reducing it.", "insight": "When the user applies a suggested solution only to surface a new, unexpected problem, a cascading cycle emerges that drives an emotional arc from engagement to frustration to diminishing confidence. The issue is not that individual fixes are wrong but that the user never feels convergence toward resolution. This pattern is especially damaging because the user's workflow depends on rapid, unbroken iteration \u2014 each new problem compounds the sense that the tool is unreliable. Over multiple sessions, this erodes the foundational trust needed for the user to continue delegating execution to AI.", "context": "Applies when troubleshooting multi-step technical configurations (LaTeX rendering, MkDocs setup, pytest execution) where solutions involve interdependent components that can fail in sequence.", "merged": [1], "supporting_evidence": "The user's fix-then-new-problem cycle was directly observed in debugging sessions with cascading failures across configurations, creating diminishing confidence despite technically correct individual answers.", "id": 2, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Complexity Is the Enemy Under Time Pressure", "tagline": "The AI's comprehensive, detailed responses paradoxically become the primary source of friction for a user who needs minimal, working solutions fast.", "insight": "There is a fundamental mismatch between what the AI offers \u2014 thorough, multi-file, well-explained solutions \u2014 and what the user can absorb given their time constraints and execution-oriented mindset. Rich, detailed responses feel like obstacles to overcome rather than resources to leverage. The more elaborate the AI's attempt to be helpful, the more the user's frustration grows. This creates a paradox where maximally helpful responses are minimally useful, and the user would be better served by stripped-down, immediately executable outputs.", "context": "Applies when the user is working under time pressure toward a concrete deliverable \u2014 especially during debugging mode or rapid iteration on code and visualizations.", "merged": [6], "supporting_evidence": "Repeatedly observed that comprehensive AI responses increased rather than decreased user friction, with the user requesting simpler alternatives or abandoning elaborate solutions entirely.", "id": 3, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Two Cognitive Modes Demand Radically Different Responses", "tagline": "The user oscillates between reactive debugging (terse, impatient, needing instant fixes) and strategic planning (calm, structured, open to guidance), and each mode requires a fundamentally different interaction style.", "insight": "The user's interaction pattern reveals two sharply different cognitive states that appear at predictable times. In debugging mode \u2014 typically during morning sessions \u2014 they are reactive, emotionally frustrated, and fire off terse messages expecting instant working answers. In planning mode \u2014 often after breaks \u2014 they are calm, purposeful, and forward-looking, asking structured questions with prior context. Debugging mode requires fast, concrete, minimal solutions; planning mode benefits from structured walkthroughs and broader guidance. Mismatching the response style to the cognitive mode (e.g., providing a detailed walkthrough during debugging) dramatically increases friction.", "context": "Applies when interpreting the user's tone and message style to calibrate response depth, pacing, and format \u2014 especially at session boundaries or after breaks.", "merged": [2], "supporting_evidence": "Directly observed pattern of terse, impatient messages during active debugging contrasted with calm, structured inquiries during planning phases, with each mode having dramatically different needs.", "id": 4, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Broken Mental Model of Shared Environmental Awareness", "tagline": "The user implicitly assumes ChatGPT can see their terminal, editor, and rendered output, creating compounding friction when this expectation breaks.", "insight": "The user operates under an assumption that ChatGPT functions like a co-located pair-programming partner with shared visibility into their development environment. When ChatGPT cannot 'see' pytest output or MkDocs rendering, the mismatch creates friction on top of existing frustration. This leads to terse, context-free messages that assume shared environmental awareness. The pattern suggests the user's natural interaction style is optimized for synchronous, co-located collaboration rather than asynchronous, text-based assistance, and they have not fully adapted their communication style to account for the AI's informational limitations.", "context": "Applies when the user is actively debugging or working in a development environment and sends raw outputs or context-free messages expecting the AI to interpret environmental state.", "merged": [0], "supporting_evidence": "The user repeatedly sent messages that assumed shared visibility into their local environment (terminal output, rendered pages), creating miscommunication when the AI lacked that context.", "id": 5, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Reactive Judgment: Knowing What's Wrong but Not What's Right", "tagline": "The user cannot articulate criteria upfront but instantly recognizes when something misses the mark, operating through reactive rejection rather than proactive specification.", "insight": "Across naming, code complexity, and creative direction, the user follows a consistent pattern: they cannot define what they want in advance but immediately know when something is wrong. They rejected mythology-based package names without being able to specify an alternative direction; they recognized overly complex code without defining the right level. This reactive preference discovery means the AI's most effective strategy is generating multiple options for rapid filtering rather than trying to nail the target in one shot. The user's creative and technical judgment is real and strong \u2014 it just operates primarily through negation.", "context": "Applies during creative or open-ended tasks such as naming, design decisions, visual aesthetics, or specifying requirements where the solution space is subjective.", "merged": [5], "supporting_evidence": "Observed across multiple domains \u2014 naming, code complexity, creative direction \u2014 where the user consistently could not specify criteria upfront but instantly rejected unsatisfactory options.", "id": 6, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Convergent Knowledge Strategy: Narrowing, Not Exploring", "tagline": "The user systematically narrows inquiry from moderately scoped questions to specific details, efficiently zeroing in on what they need but risking blind spots from unexplored adjacent territory.", "insight": "The user follows a distinctive pattern of starting with a moderately scoped question and drilling down into specifics rather than broadening their inquiry. This convergent approach is the opposite of exploratory curiosity \u2014 they never ask 'what else should I consider' or venture into adjacent concepts. The strategy is highly efficient when their mental model is correct, rapidly isolating exactly the knowledge needed. However, it carries the risk of missing important alternative approaches or adjacent concepts that a more exploratory style might uncover, particularly in domains where their mental model may have gaps.", "context": "Applies when the user is learning new material or working through complex technical problems where the breadth of the solution space is uncertain.", "merged": [10], "supporting_evidence": "Across all observed learning sessions, the user consistently narrowed rather than broadened their questions, never asking open-ended exploratory questions about what else they might need to know.", "id": 7, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Competence-Doubt Gap: AI as Confidence Bridge", "tagline": "Despite deep domain competence, the user uses ChatGPT as a quality assurance layer to bridge the gap between their draft-quality thinking and their internalized publication-quality standards.", "insight": "The user demonstrates a striking contradiction: they possess deep competence across RL, academic writing, and software development, yet repeatedly turn to ChatGPT for validation and polishing. Their self-doubt is not about whether they understand the material but about whether their output meets an internalized quality standard \u2014 likely absorbed from academic or professional environments with exacting expectations. ChatGPT effectively serves as a confidence bridge that lets the user produce work they feel meets their own bar. This explains why they delegate finishing work to AI while maintaining strong self-direction: they trust their own judgment on substance but seek external validation on polish.", "context": "Applies when the user is producing high-stakes output \u2014 academic papers, professional documentation, or any deliverable where they hold themselves to a polished, publication-ready standard.", "merged": [9], "supporting_evidence": "The user's deep competence was evident in their ability to structure RL learning paths, write LaTeX papers, and build complex applications, yet they consistently sought ChatGPT's help for polishing and validation rather than conceptual understanding.", "id": 8, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}, {"title": "Purposeful Assembly Behind Apparent Scatter", "tagline": "Rapid switching between visualization types masks a coherent, goal-directed workflow \u2014 the user has a complete deliverable imagined and is systematically constructing each component.", "insight": "What appears as scattered jumping between boxplots, raincloud plots, forest plots, and error bar caps is actually purposeful assembly of a unified deliverable, likely a publication figure or presentation. Each switch is accompanied by precise design specifications that reveal a fully imagined target. The contradiction between apparent breadth and actual depth means the user's workflow should not be interpreted as exploration \u2014 it is systematic construction. Understanding this reframes rapid topic-switching from a sign of disorganization to evidence of a clear mental blueprint being executed in parallel tracks.", "context": "Applies when the user rapidly switches between visualization types or plot components, especially when each switch includes precise design specifications.", "merged": [12], "supporting_evidence": "Observed the user jump between multiple visualization types in under 30 minutes, with each switch accompanied by targeted, precise refinements indicating a pre-imagined complete deliverable.", "id": 9, "metadata": {"input_session": 0, "time": "2025-11-14 21:58:57"}}]},
+  edges: {"1": [{"source": 0, "target": 4}, {"source": 0, "target": 7}, {"source": 0, "target": 12}, {"source": 0, "target": 13}, {"source": 1, "target": 0}, {"source": 1, "target": 1}, {"source": 1, "target": 5}, {"source": 1, "target": 9}, {"source": 1, "target": 15}, {"source": 2, "target": 16}, {"source": 2, "target": 17}, {"source": 2, "target": 5}, {"source": 2, "target": 6}, {"source": 2, "target": 2}, {"source": 2, "target": 3}, {"source": 2, "target": 10}, {"source": 2, "target": 11}, {"source": 3, "target": 23}, {"source": 3, "target": 29}, {"source": 3, "target": 31}, {"source": 3, "target": 22}, {"source": 4, "target": 19}, {"source": 4, "target": 20}, {"source": 4, "target": 21}, {"source": 5, "target": 24}, {"source": 5, "target": 25}, {"source": 5, "target": 26}, {"source": 5, "target": 27}, {"source": 5, "target": 29}, {"source": 6, "target": 18}, {"source": 6, "target": 20}, {"source": 6, "target": 25}, {"source": 6, "target": 28}, {"source": 6, "target": 29}, {"source": 7, "target": 37}, {"source": 7, "target": 41}, {"source": 7, "target": 49}, {"source": 8, "target": 34}, {"source": 8, "target": 35}, {"source": 8, "target": 39}, {"source": 8, "target": 45}, {"source": 8, "target": 46}, {"source": 8, "target": 47}, {"source": 9, "target": 36}, {"source": 9, "target": 41}, {"source": 9, "target": 42}, {"source": 9, "target": 43}, {"source": 10, "target": 33}, {"source": 10, "target": 37}, {"source": 10, "target": 49}, {"source": 10, "target": 40}, {"source": 11, "target": 53}, {"source": 11, "target": 55}, {"source": 11, "target": 50}, {"source": 11, "target": 54}, {"source": 12, "target": 51}, {"source": 12, "target": 54}, {"source": 12, "target": 55}, {"source": 12, "target": 50}, {"source": 13, "target": 50}, {"source": 13, "target": 51}, {"source": 13, "target": 52}, {"source": 13, "target": 53}], "2": [{"source": 0, "target": 3}, {"source": 0, "target": 7}, {"source": 0, "target": 11}, {"source": 1, "target": 4}, {"source": 1, "target": 8}, {"source": 1, "target": 13}, {"source": 2, "target": 1}, {"source": 3, "target": 6}, {"source": 4, "target": 2}, {"source": 5, "target": 0}, {"source": 6, "target": 5}, {"source": 7, "target": 10}, {"source": 8, "target": 9}, {"source": 9, "target": 12}]}
+};
+
+// ── Parse into display layers ──────────────────────────────────────────────
+// nodes[0] = observations (array of obs objects)
+// nodes[1] = layer-1 insights
+// nodes[2] = layer-2 insights
+// edges[1] = layer1-node → obs-nodes
+// edges[2] = layer2-node → layer1-nodes
+
+const obsData   = RAW.nodes[0] || [];
+const l1Data    = RAW.nodes[1] || [];
+const l2Data    = RAW.nodes[2] || [];
+const edges1    = RAW.edges[1] || [];   // layer-1-insight → observation
+const edges2    = RAW.edges[2] || [];   // layer-2-insight → layer-1-insight
+
+// ── Canvas setup ───────────────────────────────────────────────────────────
+const canvas  = document.getElementById('lc');
+const ctx     = canvas.getContext('2d');
+const wrap    = document.getElementById('canvas-wrap');
+
+let W, H, DPR;
+let nodes = [], edges = [], selected = null, hovered = null;
+let activeLevel = 0; // 0 = obs, 1 = l1, 2 = l2
+
+function buildGraph() {
+  DPR = window.devicePixelRatio || 1;
+  W = wrap.offsetWidth;
+  H = wrap.offsetHeight;
+  canvas.width  = W * DPR;
+  canvas.height = H * DPR;
+  ctx.scale(DPR, DPR);
+
+  nodes = [];
+  edges = [];
+
+  const PAD = 48;
+  const yObs = H - 44;
+  const yL1  = H * 0.5;
+  const yL2  = 44;
+
+  function makeRow(items, y, layer, rBase) {
+    const n = items.length;
+    return items.map((item, i) => {
+      const x = n === 1 ? W / 2 : PAD + (i / (n - 1)) * (W - 2 * PAD);
+      const node = { id: nodes.length, x, y, layer, r: rBase, data: item };
+      nodes.push(node);
+      return node;
+    });
+  }
+
+  const obsNodes = makeRow(obsData, yObs, 'obs', 4.5);
+  const l1Nodes  = makeRow(l1Data,  yL1,  'l1',  6.5);
+  const l2Nodes  = makeRow(l2Data,  yL2,  'l2',  8);
+
+  // edges[1]: source = l1 index, target = obs index
+  edges1.forEach(e => {
+    const src = l1Nodes[e.source];
+    const tgt = obsNodes[e.target];
+    if (src && tgt) edges.push({ a: src.id, b: tgt.id, layer: 'l1' });
+  });
+
+  // edges[2]: source = l2 index, target = l1 index
+  edges2.forEach(e => {
+    const src = l2Nodes[e.source];
+    const tgt = l1Nodes[e.target];
+    if (src && tgt) edges.push({ a: src.id, b: tgt.id, layer: 'l2' });
+  });
+
+  selected = null;
+  hovered  = null;
+  draw();
+}
+
+function neighbors(id) {
+  const s = new Set();
+  edges.forEach(e => {
+    if (e.a === id) s.add(e.b);
+    if (e.b === id) s.add(e.a);
+  });
+  return s;
+}
+
+// Get all nodes reachable within N hops (for multi-layer highlight)
+function reachable(id, hops) {
+  let frontier = new Set([id]);
+  let all = new Set([id]);
+  for (let h = 0; h < hops; h++) {
+    const next = new Set();
+    frontier.forEach(nid => neighbors(nid).forEach(nb => { if (!all.has(nb)) next.add(nb); }));
+    next.forEach(n => all.add(n));
+    frontier = next;
+  }
+  return all;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  const nb = selected !== null ? reachable(selected, 2) : null;
+
+  // Layer guide lines
+  const layerY = {
+    obs: nodes.find(n => n.layer === 'obs')?.y,
+    l1:  nodes.find(n => n.layer === 'l1')?.y,
+    l2:  nodes.find(n => n.layer === 'l2')?.y,
+  };
+
+  Object.values(layerY).forEach(y => {
+    if (!y) return;
+    ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(W - 40, y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1; ctx.stroke();
+  });
+
+
+
+  // Edges
+  edges.forEach(e => {
+    const a = nodes[e.a], b = nodes[e.b];
+    const active = nb && (nb.has(e.a) && nb.has(e.b));
+    const dimmed  = nb && !active;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = active ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.4)';
+    ctx.lineWidth   = active ? 1 : 0.6;
+    ctx.globalAlpha = dimmed ? 0.1 : 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
+
+  // Nodes
+  nodes.forEach(n => {
+    const isSel  = n.id === selected;
+    const isNb   = nb?.has(n.id);
+    const isHov  = n.id === hovered;
+    const dimmed = nb && !isSel && !isNb;
+
+    ctx.globalAlpha = dimmed ? 0.12 : 1;
+
+    if (isSel || isNb || isHov) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r + (isSel ? 9 : isNb ? 5 : 3), 0, Math.PI * 2);
+      ctx.fillStyle = isSel ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.07)';
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, isSel ? n.r + 1.5 : isHov ? n.r + 0.8 : n.r, 0, Math.PI * 2);
+    ctx.fillStyle = isSel ? '#ffffff' : isNb ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.72)';
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+}
+
+// ── Hit test ───────────────────────────────────────────────────────────────
+function hitTest(mx, my) {
+  let best = null, bestD = 20;
+  nodes.forEach(n => {
+    const d = Math.hypot(n.x - mx, n.y - my);
+    if (d < bestD) { bestD = d; best = n; }
+  });
+  return best;
+}
+
+// ── Panel rendering ────────────────────────────────────────────────────────
+function layerLabel(layer) {
+  return { obs: 'Observation', l1: 'Layer 1 insight', l2: 'Layer 2 insight' }[layer] || layer;
+}
+
+function renderPanel(node) {
+  const header = document.getElementById('panel-header');
+  const body   = document.getElementById('panel-body');
+  const hint   = document.getElementById('hint');
+
+  if (!node) {
+    header.style.display = 'none';
+    hint.style.opacity = '1';
+    body.innerHTML = `<div class="panel-empty">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="8" r="4" stroke="white" stroke-width="1.5"/>
+        <circle cx="8" cy="24" r="4" stroke="white" stroke-width="1.5"/>
+        <circle cx="24" cy="24" r="4" stroke="white" stroke-width="1.5"/>
+        <line x1="16" y1="12" x2="8" y2="20" stroke="white" stroke-width="1"/>
+        <line x1="16" y1="12" x2="24" y2="20" stroke="white" stroke-width="1"/>
+      </svg>
+      Select a node<br>to view details
+    </div>`;
+    return;
+  }
+
+  hint.style.opacity = '0';
+  header.style.display = 'block';
+
+  const d = node.data;
+  document.getElementById('panel-layer').textContent = layerLabel(node.layer);
+
+  const nb = neighbors(node.id);
+
+  if (node.layer === 'obs') {
+    document.getElementById('panel-title').textContent = '';
+    document.getElementById('panel-tagline').textContent = '';
+    const conf = d.confidence !== undefined ? d.confidence : '—';
+    const session = d.metadata?.input_session !== undefined ? d.metadata.input_session : '—';
+    body.innerHTML = `
+      <div class="section-label">Observation</div>
+      <p class="observation-text">${escHtml(d.observation || '')}</p>
+      <div class="conn-stat">
+        <span>${nb.size}</span> connection${nb.size !== 1 ? 's' : ''} &nbsp;·&nbsp; session <span>${session}</span>
+      </div>`;
+  } else if (node.layer === 'l1') {
+    document.getElementById('panel-title').textContent = d.title || '';
+    document.getElementById('panel-tagline').textContent = d.tagline || '';
+    const evidenceItems = (d.supporting_evidence || []).map(ev =>
+      `<li>${escHtml(ev)}</li>`).join('');
+    body.innerHTML = `
+      <div class="section-label">Insight</div>
+      <p class="insight-text">${escHtml(d.insight || '')}</p>
+      ${evidenceItems ? `<div class="section-label">Evidence</div><ul class="evidence-list">${evidenceItems}</ul>` : ''}
+      <div class="conn-stat">
+        <span>${nb.size}</span> connection${nb.size !== 1 ? 's' : ''}
+      </div>`;
+  } else {
+    document.getElementById('panel-title').textContent = d.title || '';
+    document.getElementById('panel-tagline').textContent = d.tagline || '';
+    const evidenceText = typeof d.supporting_evidence === 'string'
+      ? d.supporting_evidence
+      : (d.supporting_evidence || []).join(' ');
+    body.innerHTML = `
+      <div class="section-label">Synthesis</div>
+      <p class="insight-text">${escHtml(d.insight || '')}</p>
+      ${evidenceText ? `<div class="section-label">Evidence</div><p class="observation-text">${escHtml(evidenceText)}</p>` : ''}
+      <div class="conn-stat">
+        <span>${nb.size}</span> connection${nb.size !== 1 ? 's' : ''}
+      </div>`;
+  }
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ── Level toggle ───────────────────────────────────────────────────────────
+document.querySelectorAll('.toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeLevel = +btn.dataset.level;
+
+    const layerMap = [['obs'], ['l1'], ['l2']];
+    const targetLayers = layerMap[activeLevel];
+
+    // Find a node in that layer to select as example, or just highlight
+    const firstInLayer = nodes.find(n => targetLayers.includes(n.layer));
+    if (firstInLayer) {
+      selected = null;
+      hovered  = null;
+      draw();
+      renderPanel(null);
+    }
+  });
+});
+
+// ── Events ─────────────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+  const r  = canvas.getBoundingClientRect();
+  const mx = (e.clientX - r.left);
+  const my = (e.clientY - r.top);
+  const n  = hitTest(mx, my);
+  hovered  = n?.id ?? null;
+  canvas.style.cursor = n ? 'pointer' : 'default';
+  draw();
+});
+
+canvas.addEventListener('click', e => {
+  const r  = canvas.getBoundingClientRect();
+  const mx = (e.clientX - r.left);
+  const my = (e.clientY - r.top);
+  const n  = hitTest(mx, my);
+  selected = n && n.id !== selected ? n.id : null;
+  renderPanel(selected !== null ? nodes[selected] : null);
+  draw();
+});
+
+canvas.addEventListener('mouseleave', () => { hovered = null; draw(); });
+
+window.addEventListener('resize', () => { buildGraph(); renderPanel(null); });
+
+buildGraph();
+</script>
+</body>
+</html>

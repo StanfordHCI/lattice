@@ -13,6 +13,12 @@ import textwrap
 logger = logging.getLogger(__name__)
 
 
+class _NullCtx:
+    """No-op context manager used when tqdm is unavailable."""
+    def __enter__(self): return None
+    def __exit__(self, *_): pass
+
+
 class Lattice:
     def __init__(self, 
         name: str, 
@@ -204,7 +210,7 @@ class Lattice:
             print()
 
 
-    async def _build_first_edges(self, grouped_obs: list, insights: list):
+    async def _build_first_edges(self, grouped_obs: list, insights: list, progress=None):
         """
         Build the edges for the first layer of the lattice.
 
@@ -216,9 +222,9 @@ class Lattice:
         for insight in insights:
             sid = insight["metadata"]["input_session"]
             session_observations = self._fmt_nodes(grouped_obs[sid], "observation")
-            prompt = MAP_EVIDENCE_PROMPT.format(observations=session_observations, evidence=insight["supporting_evidence"]) 
-            edges.append(self.evidence_model.call(prompt,       resp_format=SupportingObservationsResponse))
-        return await batched_call(edges, max_concurrent=self.max_concurrent, return_exceptions=True)
+            prompt = MAP_EVIDENCE_PROMPT.format(observations=session_observations, evidence=insight["supporting_evidence"])
+            edges.append(self.evidence_model.call(prompt, resp_format=SupportingObservationsResponse))
+        return await batched_call(edges, max_concurrent=self.max_concurrent, return_exceptions=True, progress=progress)
     
     async def make_observations(self):
         """
@@ -231,7 +237,7 @@ class Lattice:
         self.num_nodes.append(len(self.observations))
         return self.observations
     
-    async def make_first_layer(self, separator: Separator):
+    async def make_first_layer(self, separator: Separator, _bar=None):
         """
         Make the first layer of the lattice turning observations into insights.
         """
@@ -239,18 +245,20 @@ class Lattice:
 
         # Stage 1: generate raw insights per group
         logger.info("Generating insights for %d groups of observations", len(grouped_nodes))
-        raw_results = await batched_call(
-            [
-                self.model.call(OBSERVATION_TO_INSIGHT_PROMPT.format(
-                    user_name=self.name,
-                    observations=self._fmt_nodes(group, "observation"),
-                    limit=self.min_insights,
-                ))
-                for group in grouped_nodes
-            ],  
-            max_concurrent=self.max_concurrent,
-            return_exceptions=True,
-        )
+        with (_bar("  generating", len(grouped_nodes)) or _NullCtx()) as bar:
+            raw_results = await batched_call(
+                [
+                    self.model.call(OBSERVATION_TO_INSIGHT_PROMPT.format(
+                        user_name=self.name,
+                        observations=self._fmt_nodes(group, "observation"),
+                        limit=self.min_insights,
+                    ))
+                    for group in grouped_nodes
+                ],
+                max_concurrent=self.max_concurrent,
+                return_exceptions=True,
+                progress=bar,
+            )
 
         valid_raw: list[tuple[int, str]] = []  # (original group index, raw text)
         for sid, result in enumerate(raw_results):
@@ -261,11 +269,13 @@ class Lattice:
 
         # Stage 2: format valid raw insights
         logger.info("Formatting insights for %d groups", len(valid_raw))
-        formatted_results = await batched_call(
-            [self.model.call(FORMAT_INSIGHT_PROMPT.format(insights=raw), Insights) for _, raw in valid_raw],
-            max_concurrent=self.max_concurrent,
-            return_exceptions=True,
-        )
+        with (_bar("  formatting", len(valid_raw)) or _NullCtx()) as bar:
+            formatted_results = await batched_call(
+                [self.model.call(FORMAT_INSIGHT_PROMPT.format(insights=raw), Insights) for _, raw in valid_raw],
+                max_concurrent=self.max_concurrent,
+                return_exceptions=True,
+                progress=bar,
+            )
 
         output_insights = []
         insight_id = 0
@@ -285,7 +295,8 @@ class Lattice:
 
         # Stage 3: build edges; _build_first_edges returns exceptions in-place
         logger.info("Building edges mapping observations to insights")
-        edges = await self._build_first_edges(grouped_nodes, output_insights)
+        with (_bar("  mapping edges", len(output_insights)) or _NullCtx()) as bar:
+            edges = await self._build_first_edges(grouped_nodes, output_insights, progress=bar)
 
         for eid, edge in enumerate(edges):
             if isinstance(edge, BaseException):
@@ -304,7 +315,7 @@ class Lattice:
         self.current_layer = output_insights
         return output_insights
     
-    async def make_layer(self, separator: Separator, input_layer: list = None):
+    async def make_layer(self, separator: Separator, input_layer: list = None, _bar=None):
         """
         Make subsequent layers of the lattice turning insights into new insights.
         """
@@ -315,7 +326,7 @@ class Lattice:
             self.current_layer = input_layer
 
         grouped_nodes = self._split_input(self.current_layer, separator)
-        
+
         # Generate insights for each group of observations
         logger.info(f"Generating insights for {len(grouped_nodes)} groups of insights")
         tasks = []
@@ -323,7 +334,8 @@ class Lattice:
             fmt_nodes = self._fmt_nodes(group, "insight")
             input_prompt = INSIGHT_SYNTHESIS_PROMPT.format(user_name=self.name, insights=fmt_nodes, limit=self.min_insights)
             tasks.append(self.model.call(input_prompt))
-        group_insights = await batched_call(tasks, max_concurrent=self.max_concurrent, return_exceptions=True)
+        with ((_bar("  synthesizing", len(tasks)) if _bar else None) or _NullCtx()) as bar:
+            group_insights = await batched_call(tasks, max_concurrent=self.max_concurrent, return_exceptions=True, progress=bar)
 
         output_insights = []
         insight_id = 0
@@ -373,21 +385,46 @@ class Lattice:
         """
         Build the lattice according to the config.
         """
-        
+        try:
+            from tqdm.auto import tqdm
+        except ImportError:
+            tqdm = None
+
         logger.info(f"Building lattice with config: {config}")
-        if self.observations is None:
-            logger.info(f"Making observations")
+
+        need_obs = self.observations is None
+        total_steps = (1 if need_obs else 0) + len(config)
+        step = 0
+
+        def _print(msg: str):
+            print(msg, flush=True)
+
+        def _bar(desc: str, total: int):
+            if tqdm is None:
+                _print(f"  {desc} (0/{total})")
+                return None
+            return tqdm(total=total, desc=desc, unit="call", leave=True)
+
+        if need_obs:
+            step += 1
+            _print(f"\n[{step}/{total_steps}] Observing interactions")
             await self.make_observations()
+            _print(f"  → {len(self.observations)} observations")
         else:
-            logger.info(f"Observations loaded")
+            _print(f"[0/{total_steps}] Observations already loaded  ({len(self.observations)} observations)")
 
         for layer in config:
-            logger.info(f"Building layer {self.layer_num}")
-            config_layer = Separator(type=config[layer]["type"], value=config[layer]["value"])
+            step += 1
+            sep = config[layer]
+            config_layer = Separator(type=sep["type"], value=sep["value"])
+            _print(f"\n[{step}/{total_steps}] Building layer {self.layer_num}  ({sep['type']} × {sep['value']})")
             if layer == 0:
-                await self.make_first_layer(separator=config_layer)
+                result = await self.make_first_layer(separator=config_layer, _bar=_bar)
             else:
-                await self.make_layer(separator=config_layer)
+                result = await self.make_layer(separator=config_layer, _bar=_bar)
+            _print(f"  → {len(result)} insights")
+
+        _print(f"\nLattice complete — {total_steps} step(s), {sum(self.num_nodes)} total nodes")
 
     def save(self, save_path: str = "lattice.json"):
         """

@@ -1,8 +1,8 @@
 # Behavior Latticing
 
-[![PyPI version](https://img.shields.io/pypi/v/latticing)](https://pypi.org/project/latticing/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![arXiv](https://img.shields.io/badge/arXiv-2604.07629-b31b1b.svg)](https://arxiv.org/abs/2604.07629)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/latticing?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/latticing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Latticing** is a Python library for transforming raw interaction traces into behavioral insights about the user's motivations.
@@ -47,7 +47,6 @@ l = Lattice(
     evidence_model=AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
     format_model=SyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
     params={"max_concurrent": 100, "min_insights": 3, "window_size": 100},
-    description="the user's conversation with ChatGPT"
 )
 
 # Each config entry defines a layer: how to group inputs into insight clusters
@@ -88,6 +87,12 @@ from lattice import AsyncLLM, SyncLLM
 model = AsyncLLM(name="claude-opus-4-6", api_key=os.getenv("ANTHROPIC_API_KEY"))
 format_model = SyncLLM(name="claude-haiku-4-5", api_key=os.getenv("ANTHROPIC_API_KEY"))
 ```
+
+## Examples
+Explore examples of how behavior latticing can be applied to different types of interaction data:
+
+- LLM Chat Histories: [Colab Notebook](https://colab.research.google.com/drive/1gR9sAAiA7oq9PkcixrVmfp8uOM6Flr-a?usp=sharing)
+- 
 
 ## Documentation
 

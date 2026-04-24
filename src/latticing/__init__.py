@@ -17,7 +17,7 @@ from Lattice import Lattice  # noqa: E402
 from models import Separator  # noqa: E402
 from Visualize import Visualizer  # noqa: E402
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 # Per Python logging best practices for libraries: attach a NullHandler so
 # that log records are silently discarded unless the application configures

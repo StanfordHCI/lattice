@@ -124,6 +124,7 @@ async def batched_call(
     max_concurrent: int,
     *,
     return_exceptions: bool = False,
+    progress=None,
 ) -> list[Any]:
     """Run async calls with a concurrency cap.
 
@@ -135,6 +136,8 @@ async def batched_call(
             ``asyncio.gather(return_exceptions=True)``) and a warning is logged
             for each failure.  When False (default), the first exception is
             re-raised after all calls complete so callers receive a clean error.
+        progress: Optional tqdm progress bar. Incremented by 1 after each
+            call completes (whether it succeeds or fails).
 
     Returns:
         Results in the same order as the input calls.  When
@@ -145,7 +148,11 @@ async def batched_call(
 
     async def _wrap(coro):
         async with semaphore:
-            return await coro
+            try:
+                return await coro
+            finally:
+                if progress is not None:
+                    progress.update(1)
 
     results = await asyncio.gather(*(_wrap(c) for c in calls), return_exceptions=True)
 

@@ -1,6 +1,5 @@
 import type {ReactNode} from 'react';
 import Link from '@docusaurus/Link';
-import useBaseUrl from '@docusaurus/useBaseUrl';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
@@ -10,7 +9,7 @@ import styles from './index.module.css';
 /* ─── Hero ───────────────────────────────────────────────────────── */
 function Hero() {
   const {siteConfig} = useDocusaurusContext();
-  const demoSrc = useBaseUrl('/hero_lattice.html');
+ 
   return (
     <header className={styles.heroBanner}>
       <div className={`container ${styles.heroInner}`}>
@@ -32,7 +31,7 @@ function Hero() {
         </div>
         <div className={styles.heroDemo}>
           <iframe
-            src={demoSrc}
+            src={`${siteConfig.baseUrl}hero_lattice.html`}
             title="Behavior Lattice interactive demo"
             className={styles.heroDemoFrame}
             scrolling="no"
@@ -124,6 +123,7 @@ function HowItWorks() {
         <div className={styles.steps}>
           {steps.map(s => (
             <div key={s.n} className={styles.step}>
+              {s.n}
               <h3 className={styles.stepTitle}>{s.title}</h3>
               <p className={styles.stepDesc}>{s.desc}</p>
             </div>
@@ -136,7 +136,7 @@ function HowItWorks() {
 
 /* ─── Features ───────────────────────────────────────────────────── */
 function Features() {
-  const demoSrc = useBaseUrl('/demo.html');
+  const {siteConfig} = useDocusaurusContext();
   return (
     <section className={styles.featuresSection}>
       <div className="container">
@@ -146,7 +146,7 @@ function Features() {
         </Heading>
         <div className={styles.latticeEmbed}>
           <iframe
-            src={demoSrc}
+            src={`${siteConfig.baseUrl}demo.html`}
             title="Behavior Lattice demo"
             className={styles.latticeFrame}
             scrolling="no"

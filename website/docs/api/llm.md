@@ -17,8 +17,7 @@ from lattice import AsyncLLM, SyncLLM
 |----------|-------------------|
 | Anthropic | `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5` |
 | OpenAI | `gpt-4o`, `gpt-4o-mini`, `o3-mini` |
-| Google | `gemini-2.0-flash`, `gemini-1.5-pro` |
-| Together AI | See `consts.py` `MODEL_FAMILIES` |
+
 
 All models must be listed in the internal `MODEL_FAMILIES` registry (`src/lattice/consts.py`). If a model is missing, add it there.
 

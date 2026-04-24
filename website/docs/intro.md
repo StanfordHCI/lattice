@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Introduction
 
-**Lattice** is a Python library for *Behavior Latticing* — a technique for transforming raw interaction traces into a structured, multi-layered graph of behavioral insights.
+**Latticing** is a Python library for *Behavior Latticing* — a technique for transforming raw interaction traces into a structured, multi-layered graph of behavioral insights.
 
 Given a stream of user interactions (e.g., screen activity logs, chat histories, click traces), Lattice:
 
@@ -14,26 +14,15 @@ Given a stream of user interactions (e.g., screen activity logs, chat histories,
 3. **Builds layers** — recursively merges per-session insights into cross-session patterns.
 4. **Visualizes** — renders the resulting lattice as an interactive graph.
 
-## Core concepts
 
-### Interaction trace
-A sequence of timestamped user actions, grouped into sessions. Each session is a list of `{ interaction, metadata }` objects.
+## When to use Behavior Latticing
+Behavior latticing is **flexible across input type**. Examples of input types are as follows:
+- Messages with LLM-based chatbots (e.g., ChatGPT, Claude) ([link](examples/chatgpt.md))
+- Interactions with coding agents (e.g., Claude Code)
+- Screen recordings of computer usage ([link](https://arxiv.org/abs/2604.07629))
 
-### Observation
-A single inferred emotional or cognitive state extracted from a window of interactions. Observations answer: *what is this person thinking or feeling right now, and what behavior supports that?*
+See our [Gallery](/gallery) for what others have built using Behavior Latticing.
 
-### Insight
-A remarkable, evidence-backed realization about the user synthesized from a group of observations. Insights answer: *what pattern or tension emerges across many moments?*
-
-### Lattice
-The full hierarchical structure: layer 0 is raw observations, layer 1 is per-session insights, layer 2+ synthesizes across sessions. Edges link each insight back to the observations or lower-level insights that support it.
-
-## When to use Lattice
-
-- Analyzing user research session recordings
-- Understanding behavioral patterns in chat logs or support tickets
-- Synthesizing diary study data
-- Any domain where you have rich sequential interaction data and want structured, model-grounded behavioral conclusions
 
 ## Quick look
 

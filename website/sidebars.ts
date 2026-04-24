@@ -16,10 +16,19 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Examples',
+      items: [
+        'examples/chatgpt',
+      ],
+    },
+    {
+      type: 'category',
       label: 'API Reference',
       items: [
         'api/lattice',
         'api/observer',
+        'api/llm',
+        'api/visualize',
       ],
     },
   ],

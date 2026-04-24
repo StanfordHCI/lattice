@@ -1,5 +1,6 @@
 import type {ReactNode} from 'react';
 import Link from '@docusaurus/Link';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
@@ -9,23 +10,33 @@ import styles from './index.module.css';
 /* ─── Hero ───────────────────────────────────────────────────────── */
 function Hero() {
   const {siteConfig} = useDocusaurusContext();
+  const demoSrc = useBaseUrl('/hero_lattice.html');
   return (
     <header className={styles.heroBanner}>
-      <div className="container">
-        <div className={styles.heroEyebrow}>v0.1.0 — early access</div>
-        <Heading as="h1" className={styles.heroTitle}>
-          Behavior Latticing
-        </Heading>
-        <p className={styles.heroSubtitle}>
-          Transform raw interaction traces into a layered, evidence-backed graph of behavioral insights.
-        </p>
-        <div className={styles.buttons}>
-          <Link className={styles.btnPrimary} to="/docs/guides/quickstart">
-            Get started →
-          </Link>
-          <Link className={styles.btnSecondary} to="/docs/intro">
-            What is Behavior Latticing?
-          </Link>
+      <div className={`container ${styles.heroInner}`}>
+        <div className={styles.heroContent}>
+          <Heading as="h1" className={styles.heroTitle}>
+            Behavior Latticing
+          </Heading>
+          <p className={styles.heroSubtitle}>
+            Transform unstructured interaction traces into inferences about user motivations.
+          </p>
+          <div className={styles.buttons}>
+            <Link className={styles.btnPrimary} to="/docs/guides/quickstart">
+              Get started →
+            </Link>
+            <Link className={styles.btnSecondary} to="/docs/intro">
+              What is Behavior Latticing?
+            </Link>
+          </div>
+        </div>
+        <div className={styles.heroDemo}>
+          <iframe
+            src={demoSrc}
+            title="Behavior Lattice interactive demo"
+            className={styles.heroDemoFrame}
+            scrolling="no"
+          />
         </div>
       </div>
     </header>
@@ -88,12 +99,12 @@ const steps = [
   {
     n: '02',
     title: 'Synthesize',
-    desc: 'Observations are grouped by session and synthesized into titled, evidence-backed insights with context on when each pattern applies.',
+    desc: 'Observations are grouped by session and synthesized into insights with context on when each pattern applies.',
   },
   {
     n: '03',
     title: 'Layer',
-    desc: 'Insights from multiple sessions are merged into higher-order patterns, revealing cross-session behaviors invisible at the individual session level.',
+    desc: 'Insights from multiple sessions are recursively merged into higher-order patterns',
   },
   {
     n: '04',
@@ -108,12 +119,11 @@ function HowItWorks() {
       <div className="container">
         <p className={styles.sectionLabel}>How it works</p>
         <Heading as="h2" className={styles.sectionHeading}>
-          From raw data to structured insight
+          From raw data to inferred motivations
         </Heading>
         <div className={styles.steps}>
           {steps.map(s => (
             <div key={s.n} className={styles.step}>
-              <div className={styles.stepNumber}>{s.n}</div>
               <h3 className={styles.stepTitle}>{s.title}</h3>
               <p className={styles.stepDesc}>{s.desc}</p>
             </div>
@@ -125,48 +135,22 @@ function HowItWorks() {
 }
 
 /* ─── Features ───────────────────────────────────────────────────── */
-const features = [
-  {
-    title: 'Provider-agnostic',
-    desc: 'Anthropic, OpenAI, Google Gemini, and Together AI. Swap providers per role — fast model for formatting, powerful model for synthesis.',
-  },
-  {
-    title: 'Multi-layer architecture',
-    desc: 'Build arbitrarily deep abstraction hierarchies. Session insights, weekly patterns, longitudinal archetypes — all in one graph.',
-  },
-  {
-    title: 'Fault-tolerant batching',
-    desc: 'Per-item error recovery across every async stage. A single failed LLM call is logged and skipped — the build never crashes.',
-  },
-  {
-    title: 'Structured outputs',
-    desc: 'Every LLM response is validated against Pydantic schemas. Forced tool use for Anthropic, native JSON schema for others.',
-  },
-  {
-    title: 'Flexible separators',
-    desc: 'Group observations by session count or by time (day / week / month / year). Mix strategies across layers.',
-  },
-  {
-    title: 'Interactive visualization',
-    desc: 'Built-in Plotly figure and a standalone zero-dependency HTML viewer. Zoom, pan, click to explore any node.',
-  },
-];
-
 function Features() {
+  const demoSrc = useBaseUrl('/demo.html');
   return (
     <section className={styles.featuresSection}>
       <div className="container">
-        <p className={styles.sectionLabel}>Features</p>
+        <p className={styles.sectionLabel}>Explore</p>
         <Heading as="h2" className={styles.sectionHeading}>
-          Everything you need
+          See Behavior Latticing in action
         </Heading>
-        <div className={styles.featuresGrid}>
-          {features.map(f => (
-            <div key={f.title} className={styles.featureCard}>
-              <h3 className={styles.featureTitle}>{f.title}</h3>
-              <p className={styles.featureDesc}>{f.desc}</p>
-            </div>
-          ))}
+        <div className={styles.latticeEmbed}>
+          <iframe
+            src={demoSrc}
+            title="Behavior Lattice demo"
+            className={styles.latticeFrame}
+            scrolling="no"
+          />
         </div>
       </div>
     </section>

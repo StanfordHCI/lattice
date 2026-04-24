@@ -44,15 +44,15 @@
   font-size: 1.125rem;
   line-height: 1.65;
   color: rgba(255, 255, 255, 0.5);
-  max-width: 520px;
-  margin: 0 auto 2.5rem;
+  max-width: 560px;
+  margin: 0 0 2.5rem;
   font-weight: 400;
 }
 
 .buttons {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -67,6 +67,7 @@
   border-radius: 8px;
   transition: opacity 0.15s, transform 0.15s;
   text-decoration: none !important;
+  width: 100%;
 }
 
 .btnPrimary:hover {
@@ -84,6 +85,7 @@
   border-radius: 8px;
   transition: border-color 0.15s, color 0.15s, transform 0.15s;
   text-decoration: none !important;
+  width: 100%;
 }
 
 .btnSecondary:hover {
@@ -92,9 +94,55 @@
   transform: translateY(-1px);
 }
 
-@media (max-width: 768px) {
+.heroInner {
+  display: flex;
+  align-items: center;
+  gap: 3rem;
+  text-align: left;
+}
+
+.heroContent {
+  flex: 0 0 30%;
+}
+
+.heroDemo {
+  flex: 0 0 70%;
+  min-width: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.heroDemoFrame {
+  display: block;
+  width: 100%;
+  height: 360px;
+  border: none;
+}
+
+@media (max-width: 900px) {
   .heroBanner {
     padding: 4rem 1.5rem;
+    text-align: center;
+  }
+
+  .heroInner {
+    flex-direction: column;
+  }
+
+  .heroContent {
+    flex: none;
+    width: 100%;
+    text-align: center;
+  }
+
+  .heroDemo {
+    display: none;
+  }
+
+  .buttons {
+    justify-content: center;
   }
 }
 
@@ -296,4 +344,19 @@
   line-height: 1.65;
   opacity: 0.6;
   margin: 0;
+}
+
+/* ─── Lattice embed ───────────────────────────────────────────────── */
+.latticeEmbed {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+}
+
+.latticeFrame {
+  display: block;
+  width: 100%;
+  height: 520px;
+  border: none;
 }

@@ -100,7 +100,7 @@ After calling `l.save("lattice.json")`, the file has this structure:
 
 `source` is the higher-layer node id; `target` is the lower-layer node id.
 
-## Separator
+## Lattice Configs
 
 The `Separator` dataclass controls how nodes are grouped when building each layer.
 

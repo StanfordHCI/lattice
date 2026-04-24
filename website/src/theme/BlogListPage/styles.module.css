@@ -1,0 +1,71 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+.heading {
+  margin-bottom: 2rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  color: inherit;
+  text-decoration: none;
+}
+
+.cardTitle {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: var(--ifm-color-primary);
+}
+
+.cardDate {
+  font-size: 0.8rem;
+  color: var(--ifm-color-emphasis-600);
+  margin-bottom: 0.75rem;
+}
+
+.cardDesc {
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  flex: 1;
+  margin: 0 0 1rem 0;
+  line-height: 1.5;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: auto;
+}
+
+.tag {
+  background: var(--ifm-color-primary-lightest);
+  color: var(--ifm-color-primary-darkest);
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}

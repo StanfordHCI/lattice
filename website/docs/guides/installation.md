@@ -7,31 +7,13 @@ sidebar_position: 1
 
 ## Requirements
 
-- Python 3.9+
-- An API key for at least one supported LLM provider (Anthropic, OpenAI, Google, or Together AI)
+- Python 3.10+
+- An API key for at least one supported LLM provider (Anthropic or OpenAI)
 
-## Install from source
-
-Lattice is not yet published to PyPI. Clone the repository and install it in editable mode:
+The Behavior Latticing Python package is available on PyPl as `latticing`. We recommend setting up a virtual environment with venv or conda. 
 
 ```bash
-git clone https://github.com/dorazhao99/lattice.git
-cd lattice
-pip install -e .
-```
-
-## Install dependencies only
-
-If you want to pin your own versions, the core runtime dependencies are:
-
-```
-anthropic>=0.96.0
-openai>=2.32.0
-google-genai>=1.47.0
-together>=2.9.0
-plotly>=5.0.0
-tenacity>=9.1.2
-pyyaml>=6.0.3
+pip install latticing
 ```
 
 ## Environment variables
@@ -44,13 +26,9 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 # OpenAI (GPT)
 OPENAI_API_KEY=sk-...
-
-# Google (Gemini)
-GOOGLE_API_KEY=...
-
-# Together AI
-TOGETHER_API_KEY=...
 ```
+
+:construction: We are working on providing support for additional model providers. If there is a model provider you are interested in, please submit a Github [issue](https://github.com/StanfordHCI/lattice/issues).
 
 Load them in your script with `python-dotenv`:
 
@@ -59,21 +37,3 @@ from dotenv import load_dotenv
 load_dotenv()
 ```
 
-## Jupyter notebooks
-
-If you are working inside a Jupyter notebook and cannot install the package (e.g., due to conda/pip conflicts), add the source directory to the path manually:
-
-```python
-import sys, os
-sys.path.insert(0, os.path.abspath('/path/to/lattice/src'))
-```
-
-## Logging
-
-Lattice follows Python logging best practices for libraries — it attaches a `NullHandler` and never calls `basicConfig`. Configure logging in your application:
-
-```python
-import logging
-logging.basicConfig(level=logging.WARNING)
-logging.getLogger('lattice').setLevel(logging.INFO)  # show lattice logs only
-```

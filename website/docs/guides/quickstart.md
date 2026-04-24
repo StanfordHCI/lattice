@@ -9,50 +9,58 @@ This guide walks through a complete end-to-end example using a ChatGPT conversat
 
 ## 1. Prepare your data
 
-Format your raw data into Lattice's interaction trace format — a list of sessions, each containing a list of `{ interaction, metadata }` objects:
-
-```python
-import json
-from datetime import datetime
-
-def process_chat_data(data, user_name, convo_min_len=10):
-    interaction_traces = []
-    for d in data:
-        convo = []
-        conversation_start = datetime.fromtimestamp(d['create_time']).strftime('%Y-%m-%d %H:%M:%S')
-        for mid in d['mapping']:
-            msg = d['mapping'][mid]['message']
-            if msg is None:
-                continue
-            author = msg['author']['role']
-            if author == "user":
-                author = user_name
-            create_time = msg['create_time']
-            content = msg['content']
-            if author == 'system' or create_time is None or "parts" not in content:
-                continue
-            readable_time = datetime.fromtimestamp(create_time).strftime('%Y-%m-%d %H:%M:%S')
-            try:
-                text = " ".join(content['parts'])
-            except Exception:
-                text = ""
-            if len(text) > 0:
-                convo.append({
-                    "interaction": f"{author}: {text}",
-                    "metadata": {"time sent": readable_time}
-                })
-        if len(convo) > convo_min_len:
-            interaction_traces.append({
-                "interactions": convo,
-                "time": conversation_start
-            })
-    return interaction_traces
-
-data = json.load(open("conversations.json"))
-interaction_traces = process_chat_data(data, user_name="Alice")
+Format your raw data into the interaction trace format. For more details on how to format your interaction traces, see [Data Format](./data-format.md).
+```
+#  Example Input
+[
+    {
+        "interactions": [
+            {
+                "interaction": "User: Tell me a joke",
+                "metadata": {"time": "2026-04-21 10:00:00"}
+            },
+            {
+                "interaction": "ChatGPT: Why did the chicken cross the road",
+                "metadata": {"time": "2026-04-21 10:00:30"}
+            },
+            {
+                "interaction": "User: idk. why?",
+                "metadata": {"time": "2026-04-21 10:01:00"}
+            },
+        ],
+        "time": "2026-04-21 10:00:00" # Optional
+    }, 
+    {
+        "interactions": [
+            {
+                "interaction": "User: What is the best restaurant in Palo Alto",
+                "metadata": {"time": "2026-04-21 11:35:00"}
+            },
+            {
+                "interaction": "ChatGPT: O2 Valley",
+                "metadata": {"time": "2026-04-22 11:35:02"}
+            }
+        ],
+        "time": "2026-04-21 11:35:00" # Optional
+    }, 
+    ...
+]
 ```
 
 ## 2. Create the Lattice
+Behavior Lattice currently supports LLMs via the OpenAI API and Anthropic API under the hood for its core operators. You will need to set the `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` depending on the model provider you set in a `.env` file or by localling setting the variables.
+
+```
+import os 
+os.environ["OPENAI_API_KEY"] = "sk-YOUR-KEY-HERE"
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-YOUR-KEY-HERE"
+```
+
+:::tip
+For best results, we recommend using Anthropic's Sonnet or Opus models. However, you can mix and match models to achieve the most performant results for your use case.
+:::
+
+After loading your data, **create a new Lattice** instance. You will need to specify the user's name (`name`), a description of the types of interactions being based in (`description`), and the configurations for the LLMs to use.
 
 ```python
 import os
@@ -62,19 +70,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 l = Lattice(
-    name="Alice",
+    name="User",
     interactions=interaction_traces,
     description="the user's conversation with ChatGPT",
-    model=AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+    observer_model=AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+    insight_model=AsyncLLM(name="claude-opus-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
     evidence_model=AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
     format_model=SyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
-    params={"max_concurrent": 50, "min_insights": 3, "window_size": 10},
 )
 ```
 
-## 3. Define the build config
+## 3. Define the Lattice configuration
 
-The config maps each layer to a `Separator` that controls how inputs are grouped:
+Before building, you will need to provide a **config** that specifies how inputs are grouped during the latticing process. Each item in the config maps to a layer in the lattice. For more information on creating configurations, see [Data Format](./data-format.md#lattice-configs).
 
 ```python
 config = {
@@ -84,6 +92,7 @@ config = {
 ```
 
 ## 4. Build
+Next, you can go ahead and start the latticing process by using the `build` function, which takes as input the `config` you set in the [previous step](./quickstart.md#3-define-the-lattice-configuration).
 
 ```python
 # In a Jupyter notebook (async context):
@@ -94,7 +103,15 @@ import asyncio
 asyncio.run(l.build(config))
 ```
 
-## 5. Inspect results
+The `build` function creates the entire lattice. For more control over the individual layers, refer to our guide on [Building Layers](./building-layers.md).
+
+
+## 5. Visualization
+
+Now, you can visualize the results of the lattice using the following functions.
+
+### Textual Descriptions
+You can inspect each node in the layer (defaults to the top-most layer of the lattice) printed as text output.
 
 ```python
 # Print current (top-most) layer
@@ -104,15 +121,30 @@ l.print_layer()
 l.print_layer(layer_num=1)
 ```
 
-## 6. Save and visualize
+### Plotly Figure
+You can also view the lattice as an interactive Plotly figure.
 
 ```python
-# Save to JSON
-l.save("lattice.json")
-
-# Interactive Plotly figure (works in Jupyter)
 fig = l.visualize()
 fig.show()
-
-# Or open examples/visualize.html and upload lattice.json for a standalone viewer
 ```
+
+### Web Viewer
+We also provide a browser-based visualization tool for generated lattices. You will need to save the generated lattice as a JSON file and upload the JSON file to our tool.
+
+```python
+# Save lattice
+l.save() # By default saves to lattice.json
+```
+
+### Python Widget
+If using `latticing` in a Jupyter notebook, you can also visualize layers using an interactive widget:
+
+```python
+# Render Python widget
+l.visualize_widget()
+```
+
+![Widget animation](/img/widget.gif)
+
+

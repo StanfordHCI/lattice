@@ -3,19 +3,21 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'Lattice',
-  tagline: 'Behavior Latticing — turn interaction traces into layered behavioral insights',
+  title: 'Behavior Latticing',
+  tagline: 'Behavior Latticing — inferring user motivations from unstructured interactions',
   favicon: 'img/favicon.ico',
 
   future: {
     v4: true,
   },
 
-  url: 'https://your-docusaurus-site.example.com',
-  baseUrl: '/',
+  url: 'https://stanfordhci.github.io',
+  baseUrl: '/lattice',
 
-  organizationName: 'dorazhao99',
+  organizationName: 'stanfordhci',
   projectName: 'lattice',
+
+  trailingSlash: false,
 
   onBrokenLinks: 'throw',
   markdown: {
@@ -35,9 +37,15 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/dorazhao99/lattice/tree/main/website/',
+          editUrl: 'https://github.com/stanfordhci/lattice/tree/main/website/',
         },
-        blog: false,
+        blog: {
+          routeBasePath: 'gallery',
+          blogTitle: 'Gallery',
+          blogSidebarTitle: 'All Posts',
+          blogSidebarCount: 'ALL',
+          postsPerPage: 'ALL',
+        },
         theme: {
           customCss: './src/css/custom.css',
         },
@@ -50,7 +58,7 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'Lattice',
+      title: 'Behavior Latticing',
       items: [
         {
           type: 'docSidebar',
@@ -59,7 +67,12 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/dorazhao99/lattice',
+          to: '/gallery',
+          label: 'Gallery',
+          position: 'left',
+        },
+        {
+          href: 'https://github.com/stanfordhci/lattice',
           label: 'GitHub',
           position: 'right',
         },
@@ -80,12 +93,12 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/dorazhao99/lattice',
+              href: 'https://github.com/stanfordhci/lattice',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Lattice. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Stanford HCI Group. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,

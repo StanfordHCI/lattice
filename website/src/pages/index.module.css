@@ -1,0 +1,299 @@
+/* ─── Hero ────────────────────────────────────────────────────────── */
+.heroBanner {
+  padding: 7rem 1.5rem 6rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background: #0e0e0d;
+  /* Subtle dot-grid pattern */
+  background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.heroBanner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,255,255,0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.heroEyebrow {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 4px 14px;
+  margin-bottom: 1.5rem;
+}
+
+.heroTitle {
+  font-size: clamp(2.8rem, 6vw, 4.5rem) !important;
+  font-weight: 700;
+  letter-spacing: -0.035em !important;
+  line-height: 1.08;
+  color: #ffffff;
+  margin-bottom: 1.25rem;
+}
+
+.heroSubtitle {
+  font-size: 1.125rem;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.5);
+  max-width: 520px;
+  margin: 0 auto 2.5rem;
+  font-weight: 400;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btnPrimary {
+  background: #ffffff;
+  color: #0e0e0d !important;
+  border: 1px solid #ffffff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.65rem 1.5rem;
+  border-radius: 8px;
+  transition: opacity 0.15s, transform 0.15s;
+  text-decoration: none !important;
+}
+
+.btnPrimary:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.btnSecondary {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-weight: 500;
+  font-size: 0.9rem;
+  padding: 0.65rem 1.5rem;
+  border-radius: 8px;
+  transition: border-color 0.15s, color 0.15s, transform 0.15s;
+  text-decoration: none !important;
+}
+
+.btnSecondary:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.9) !important;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+  .heroBanner {
+    padding: 4rem 1.5rem;
+  }
+}
+
+/* ─── Code preview strip ──────────────────────────────────────────── */
+.codeStrip {
+  background: #f5f5f4;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  padding: 3.5rem 1.5rem;
+  overflow: hidden;
+}
+
+[data-theme='dark'] .codeStrip {
+  background: #161614;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.codeStripInner {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.codeStripLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.4;
+  margin-bottom: 1rem;
+}
+
+.codeBlock {
+  background: #1e1e1e;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.14), 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.codeBlockHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.dotRed   { background: #ff5f56; }
+.dotYellow{ background: #ffbd2e; }
+.dotGreen { background: #27c93f; }
+
+.codeBlockFilename {
+  margin-left: 8px;
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.codeBlockBody {
+  padding: 1.5rem 1.75rem;
+  overflow-x: auto;
+}
+
+.codeBlockBody pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.825rem;
+  line-height: 1.7;
+  color: #e4e4e7;
+  white-space: pre;
+}
+
+.cGray    { color: #6b7280; }
+.cKeyword { color: #a78bfa; }
+.cString  { color: #86efac; }
+.cParam   { color: #93c5fd; }
+.cFn      { color: #fbbf24; }
+.cComment { color: #4b5563; font-style: italic; }
+
+/* ─── Steps section ───────────────────────────────────────────────── */
+.stepsSection {
+  padding: 5rem 1.5rem;
+}
+
+.sectionLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.35;
+  margin-bottom: 0.5rem;
+}
+
+.sectionHeading {
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 3.5rem;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 2rem;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.stepNumber {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--lat-surface-raised, #f5f5f4);
+  border: 1px solid var(--lat-border, rgba(0,0,0,0.08));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--ifm-color-primary);
+  flex-shrink: 0;
+}
+
+.stepTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.stepDesc {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  opacity: 0.6;
+  margin: 0;
+}
+
+/* ─── Features grid ───────────────────────────────────────────────── */
+.featuresSection {
+  padding: 5rem 1.5rem;
+  background: var(--lat-surface-raised, #f7f7f6);
+  border-top: 1px solid var(--lat-border, rgba(0,0,0,0.07));
+  border-bottom: 1px solid var(--lat-border, rgba(0,0,0,0.07));
+}
+
+[data-theme='dark'] .featuresSection {
+  background: #161614;
+}
+
+.featuresGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1px;
+  background: var(--lat-border, rgba(0,0,0,0.08));
+  border: 1px solid var(--lat-border, rgba(0,0,0,0.08));
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.featureCard {
+  background: var(--ifm-background-color, #fff);
+  padding: 1.75rem;
+  transition: background 0.15s;
+}
+
+[data-theme='dark'] .featureCard {
+  background: #111110;
+}
+
+.featureCard:hover {
+  background: var(--lat-surface-raised, #f5f5f4);
+}
+
+[data-theme='dark'] .featureCard:hover {
+  background: #1a1a18;
+}
+
+.featureTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.5rem;
+}
+
+.featureDesc {
+  font-size: 0.845rem;
+  line-height: 1.65;
+  opacity: 0.6;
+  margin: 0;
+}

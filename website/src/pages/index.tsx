@@ -30,7 +30,7 @@ function Hero() {
         </div>
         <div className={styles.heroDemo}>
           <iframe
-            src={`${siteConfig.baseUrl}hero_lattice.html`}
+            src={`${siteConfig.baseUrl}/hero_lattice`}
             title="Behavior Lattice interactive demo"
             className={styles.heroDemoFrame}
             scrolling="no"
@@ -145,7 +145,7 @@ function Features() {
         </Heading>
         <div className={styles.latticeEmbed}>
           <iframe
-            src={`${siteConfig.baseUrl}demo.html`}
+            src={`${siteConfig.baseUrl}/demo`}
             title="Behavior Lattice demo"
             className={styles.latticeFrame}
             scrolling="no"

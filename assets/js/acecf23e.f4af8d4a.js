@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkwebsite=self.webpackChunkwebsite||[]).push([["220"],{1912(e){e.exports=JSON.parse('{"blogBasePath":"/lattice/gallery","blogTitle":"Gallery","authorsListPath":"/lattice/gallery/authors"}')}}]);

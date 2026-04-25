@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkwebsite=self.webpackChunkwebsite||[]).push([["577"],{6536(e){e.exports=JSON.parse('{"metadata":{"permalink":"/lattice/gallery","page":1,"postsPerPage":1,"totalPages":1,"totalCount":1,"blogDescription":"Blog","blogTitle":"Gallery"}}')}}]);

@@ -3,15 +3,12 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
-import useBaseUrl from '@docusaurus/useBaseUrl';
-import siteConfig from '@site/docusaurus.config';
 
 import styles from './index.module.css';
 
 /* ─── Hero ───────────────────────────────────────────────────────── */
 function Hero() {
-  const heroLatticeUrl = useBaseUrl('hero_lattice');
-  console.log(heroLatticeUrl);
+  const {siteConfig} = useDocusaurusContext();
   return (
     <header className={styles.heroBanner}>
       <div className={`container ${styles.heroInner}`}>
@@ -33,7 +30,7 @@ function Hero() {
         </div>
         <div className={styles.heroDemo}>
           <iframe
-            src={heroLatticeUrl}
+            src={`${siteConfig.baseUrl}hero_lattice.html`}
             title="Behavior Lattice interactive demo"
             className={styles.heroDemoFrame}
             scrolling="no"
@@ -148,7 +145,7 @@ function Features() {
         </Heading>
         <div className={styles.latticeEmbed}>
           <iframe
-            src={siteConfig.baseUrl + 'demo'}
+            src={`${siteConfig.baseUrl}demo.html`}
             title="Behavior Lattice demo"
             className={styles.latticeFrame}
             scrolling="no"

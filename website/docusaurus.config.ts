@@ -14,7 +14,7 @@ const config: Config = {
   url: 'https://your-docusaurus-site.example.com',
   baseUrl: '/',
 
-  organizationName: 'dorazhao99',
+  organizationName: 'StanfordHCI',
   projectName: 'lattice',
 
   onBrokenLinks: 'throw',
@@ -35,7 +35,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/dorazhao99/lattice/tree/main/website/',
+          editUrl: 'https://github.com/StanfordHCI/lattice/tree/main/website/',
         },
         blog: false,
         theme: {
@@ -59,7 +59,7 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/dorazhao99/lattice',
+          href: 'https://github.com/StanfordHCI/lattice',
           label: 'GitHub',
           position: 'right',
         },
@@ -80,7 +80,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/dorazhao99/lattice',
+              href: 'https://github.com/StanfordHCI/lattice',
             },
           ],
         },

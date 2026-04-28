@@ -40,6 +40,7 @@ async def call_anthropic(
     temperature: float = 1.0,
     max_tokens: int = 5000,
     resp_format: Any = None,
+    is_verbose: bool = False,
 ) -> str:
     """
     Call Anthropic Messages API and return the text content of the first response block.
@@ -59,6 +60,8 @@ async def call_anthropic(
     system
         Optional system prompt to prepend.
     """
+    if is_verbose:
+        print(f"Calling Anthropic model {model} with prompt {prompt}")
     if not isinstance(client, AsyncAnthropic):
         raise TypeError("call_anthropic expects an AsyncAnthropic client.")
 

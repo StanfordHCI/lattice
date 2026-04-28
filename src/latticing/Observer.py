@@ -67,13 +67,13 @@ class Observer:
         output_observations = []
 
         obs_id = 0
-        for sid, session_observations in enumerate(observations):
-            fmt_observations = [self._fmt_observation(observation) for observation in session_observations if observation is not None]
-            for observations in fmt_observations:
-                if "observations" not in observations:
+        for sid, (session, session_observations) in enumerate(zip(interactions, observations)):
+            fmt_observations = [self._fmt_observation(obs) for obs in session_observations if obs is not None]
+            for obs_window in fmt_observations:
+                if "observations" not in obs_window:
                     logger.error(f"No observations found for session {sid}")
                     continue
-                for obs in observations["observations"]:
+                for obs in obs_window["observations"]:
                     for obs_type in ["think_feel", "actions"]:
                         if obs_type in obs:
                             obs_node = {

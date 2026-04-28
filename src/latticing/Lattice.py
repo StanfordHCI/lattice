@@ -10,6 +10,9 @@ import json
 import logging
 import numpy as np
 import math
+import pickle
+import time
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -135,11 +138,14 @@ class Lattice:
         """
         Make observations for the interactions.
         """
+        print(f"[Lattice] Making observations for {len(self.interactions)} interactions...")
+        t0 = time.time()
         self.observations = await self.observer.observe(self.interactions)
         self.lattice["nodes"][0] = self.observations
         self.current_layer = self.observations
         self.layer_num = 1
         self.num_nodes.append(len(self.observations))
+        print(f"[Lattice] Observations done: {len(self.observations)} observations in {time.time()-t0:.1f}s")
         return self.observations
     
     async def make_first_layer(self, layer: LatticeLayer):
@@ -147,9 +153,11 @@ class Lattice:
         Make the first layer of the lattice turning observations into insights.
         """
         grouped_nodes = layer.split(self.current_layer)
+        n_groups = len(grouped_nodes)
 
         # Stage 1: generate raw insights per group
-        logger.info("Generating insights for %d groups of observations", len(grouped_nodes))
+        print(f"[Layer {self.layer_num}] Generating insights for {n_groups} groups of observations...")
+        t0 = time.time()
         raw_results = await batched_call(
             [
                 self.model.call(OBSERVATION_TO_INSIGHT_PROMPT.format(
@@ -157,26 +165,29 @@ class Lattice:
                     observations=self._fmt_nodes(group, "observation"),
                     limit=self.min_insights,
                 ))
-                for group in grouped_nodes
-            ],  
+                for group in tqdm(grouped_nodes, desc="  Preparing prompts", leave=False)
+            ],
             max_concurrent=self.max_concurrent,
             return_exceptions=True,
         )
+        print(f"[Layer {self.layer_num}] Raw insights done in {time.time()-t0:.1f}s")
 
-        valid_raw: list[tuple[int, str]] = []  # (original group index, raw text)
+        valid_raw: list[tuple[int, str]] = []
         for sid, result in enumerate(raw_results):
             if isinstance(result, BaseException):
                 logger.error("Insight generation failed for group %d, skipping: %s", sid, result)
             else:
                 valid_raw.append((sid, result))
+        print(f"[Layer {self.layer_num}] {len(valid_raw)}/{n_groups} groups succeeded, formatting...")
 
         # Stage 2: format valid raw insights
-        logger.info("Formatting insights for %d groups", len(valid_raw))
+        t1 = time.time()
         formatted_results = await batched_call(
             [self.model.call(FORMAT_INSIGHT_PROMPT.format(insights=raw), Insights) for _, raw in valid_raw],
             max_concurrent=self.max_concurrent,
             return_exceptions=True,
         )
+        print(f"[Layer {self.layer_num}] Formatting done in {time.time()-t1:.1f}s")
 
         output_insights = []
         insight_id = 0
@@ -189,14 +200,17 @@ class Lattice:
                 insight_dict = insight.model_dump()
                 insight_dict["id"] = insight_id
                 insight_dict["metadata"] = {"input_session": sid}
-                if "time" in grouped_nodes[sid][-1]["metadata"]:
-                    insight_dict["metadata"]["time"] = grouped_nodes[sid][-1]["metadata"]["time"]
+                node_meta = grouped_nodes[sid][-1].get("metadata", {})
+                if "time" in node_meta:
+                    insight_dict["metadata"]["time"] = node_meta["time"]
                 output_insights.append(insight_dict)
                 insight_id += 1
 
-        # Stage 3: build edges; _build_first_edges returns exceptions in-place
-        logger.info("Building edges mapping observations to insights")
+        # Stage 3: build edges
+        print(f"[Layer {self.layer_num}] Building edges for {len(output_insights)} insights...")
+        t2 = time.time()
         edges = await self._build_first_edges(grouped_nodes, output_insights)
+        print(f"[Layer {self.layer_num}] Edges done in {time.time()-t2:.1f}s")
 
         for eid, edge in enumerate(edges):
             if isinstance(edge, BaseException):
@@ -208,7 +222,7 @@ class Lattice:
             for supporting_id in edge.supporting_ids:
                 self.lattice["edges"][self.layer_num].append({"source": iid, "target": supporting_id})
 
-        logger.info("Number of nodes in layer %d: %d", self.layer_num, len(output_insights))
+        print(f"[Layer {self.layer_num}] Complete: {len(output_insights)} insights (total {time.time()-t0:.1f}s)")
         self.lattice["nodes"][self.layer_num] = output_insights
         self.layer_num += 1
         self.num_nodes.append(len(output_insights))
@@ -226,15 +240,20 @@ class Lattice:
             self.current_layer = input_layer
 
         grouped_nodes = layer.split(self.current_layer)
-        
-        # Generate insights for each group of observations
-        logger.info(f"Generating insights for {len(grouped_nodes)} groups of insights")
-        tasks = []
-        for group in grouped_nodes:
-            fmt_nodes = self._fmt_nodes(group, "insight")
-            input_prompt = INSIGHT_SYNTHESIS_PROMPT.format(user_name=self.name, insights=fmt_nodes, limit=self.min_insights)
-            tasks.append(self.model.call(input_prompt))
+        n_groups = len(grouped_nodes)
+
+        print(f"[Layer {self.layer_num}] Synthesizing insights for {n_groups} groups...")
+        t0 = time.time()
+        tasks = [
+            self.model.call(INSIGHT_SYNTHESIS_PROMPT.format(
+                user_name=self.name,
+                insights=self._fmt_nodes(group, "insight"),
+                limit=self.min_insights,
+            ))
+            for group in tqdm(grouped_nodes, desc="  Preparing prompts", leave=False)
+        ]
         group_insights = await batched_call(tasks, max_concurrent=self.max_concurrent, return_exceptions=True)
+        print(f"[Layer {self.layer_num}] Synthesis done in {time.time()-t0:.1f}s")
 
         output_insights = []
         insight_id = 0
@@ -254,26 +273,21 @@ class Lattice:
                     continue
             for insight_dict in insights['insights']:
                 insight_dict["id"] = insight_id
-                insight_dict["metadata"] = {
-                    "input_session": sid,
-                }
-                if "time" in grouped_nodes[sid][-1]["metadata"]:
-                    # inherit the time of the last node in the group
-                    insight_dict["metadata"]["time"] = grouped_nodes[sid][-1]["metadata"]["time"]
+                insight_dict["metadata"] = {"input_session": sid}
+                node_meta = grouped_nodes[sid][-1].get("metadata", {})
+                if "time" in node_meta:
+                    insight_dict["metadata"]["time"] = node_meta["time"]
                 output_insights.append(insight_dict)
                 insight_id += 1
-        
-        # Add edges for the new insights
-        logger.info(f"Building edges mapping insights to insights")
+
         self.lattice["edges"][self.layer_num] = []
         for insight in output_insights:
             if "merged" in insight and insight["merged"] is not None:
                 for merged_id in insight["merged"]:
                     self.lattice["edges"][self.layer_num].append({"source": insight["id"], "target": merged_id})
 
-        # Add the insights to the lattice
-        logger.info(f"Number of nodes in layer {self.layer_num}: {len(output_insights)}")
-        self.lattice["nodes"][self.layer_num] = output_insights 
+        print(f"[Layer {self.layer_num}] Complete: {len(output_insights)} insights (total {time.time()-t0:.1f}s)")
+        self.lattice["nodes"][self.layer_num] = output_insights
         self.layer_num += 1
         self.num_nodes.append(len(output_insights))
         self.current_layer = output_insights
@@ -292,19 +306,24 @@ class Lattice:
             raise ValueError("No config provided. Run auto_config() to generate a default config or provide a custom config.")
         layers = self.config
 
-        logger.info(f"Building lattice with layers: {layers}")
-        if self.observations is None:
-            logger.info("Making observations")
-            await self.make_observations()
-        else:
-            logger.info("Observations loaded")
+        n_layers = len(layers)
+        print(f"[Lattice] Building with {n_layers} layer(s): {layers}")
+        t_total = time.time()
 
-        for i, layer in enumerate(layers):
-            logger.info(f"Building layer {self.layer_num}")
+        if self.observations is None:
+            await self.make_observations()
+            print(f"Saving observations")
+            json.dump(self.observations, open("observations.json", "w")) # TODO: save to a more permanent location
+        else:
+            print(f"[Lattice] Using {len(self.observations)} pre-loaded observations")
+
+        for i, layer in tqdm(enumerate(layers), total=n_layers, desc="Lattice layers"):
             if i == 0:
                 await self.make_first_layer(layer=layer)
             else:
                 await self.make_layer(layer=layer)
+
+        print(f"[Lattice] Build complete in {time.time()-t_total:.1f}s | layers: {self.num_nodes}")
 
     def save(self, save_path: str = "lattice.json"):
         """
@@ -312,6 +331,20 @@ class Lattice:
         """
         with open(save_path, "w") as f:
             json.dump(self.lattice, f)
+        
+    def save_object(self, save_path: str = "lattice.pkl"):
+        """
+        Save the lattice to a pickle file.
+        """
+        output = {
+            "lattice": self.lattice,
+            "config": self.config,
+            "interactions": self.interactions,
+            "observations": self.observations,
+            "name": self.name,
+        }
+        with open(save_path, "wb") as f:
+            pickle.dump(output, f)
     
     def visualize(self, load_path: str | None = None):
         """

@@ -16,6 +16,7 @@ from SyncLLM import SyncLLM  # noqa: E402
 from Lattice import Lattice  # noqa: E402
 from models import Separator  # noqa: E402
 from Visualize import Visualizer  # noqa: E402
+from Layers import LatticeLayer, Sequential, SessionLayer, AllLayer, TimeLayer, NumberLayer  # noqa: E402
 
 __version__ = "0.1.2"
 

@@ -1,22 +1,17 @@
-from re import S
 from prompts import OBSERVATION_TO_INSIGHT_PROMPT, MAP_EVIDENCE_PROMPT, FORMAT_INSIGHT_PROMPT, INSIGHT_SYNTHESIS_PROMPT
 from utils import batched_call, parse_model_json, parse_model_json_with_fallback
 from AsyncLLM import AsyncLLM
 from SyncLLM import SyncLLM
 from Observer import Observer
 from Visualize import Visualizer
-from models import Insights, Separator, SupportingObservationsResponse
+from Layers import LatticeLayer, Sequential, SessionLayer, AllLayer
+from models import Insights, SupportingObservationsResponse
 import json
 import logging
-import textwrap
+import numpy as np
+import math
 
 logger = logging.getLogger(__name__)
-
-
-class _NullCtx:
-    """No-op context manager used when tqdm is unavailable."""
-    def __enter__(self): return None
-    def __exit__(self, *_): pass
 
 
 class Lattice:
@@ -28,6 +23,7 @@ class Lattice:
         observer_model: AsyncLLM,
         evidence_model: AsyncLLM, 
         format_model: SyncLLM, 
+        config: Sequential | None = None,
         observations: list | None = None, 
         params: dict = {"max_concurrent": 100, "min_insights": 3, "window_size": 10}
     ):
@@ -44,6 +40,7 @@ class Lattice:
         self.model = insight_model
         self.evidence_model = evidence_model
         self.format_model = format_model
+        self.config = config
 
 
 
@@ -59,115 +56,6 @@ class Lattice:
             self.observations = None
 
     
-    def _split_by_time(self, nodes: list, separate_by: str) -> list:
-        """
-        Validate that every node has a 'time' field in its metadata, then
-        group nodes into buckets by day, week, month, or year.
-
-        Args:
-            nodes: List of node dicts, each with metadata["time"] as a
-                   datetime-parseable string.
-            separate_by: One of "day", "week", "month", "year".
-
-        Returns:
-            List of lists; each inner list contains all nodes that share the
-            same time bucket, in chronological order within the bucket.
-            Buckets themselves are ordered chronologically.
-        """
-        from datetime import datetime
-
-        if separate_by not in ("day", "week", "month", "year"):
-            raise ValueError(
-                f"separate_by must be 'day', 'week', 'month', or 'year'; got '{separate_by}'."
-            )
-
-        missing = [i for i, n in enumerate(nodes) if "time" not in n.get("metadata", {})]
-        if missing:
-            raise ValueError(
-                f"Nodes at indices {missing} are missing 'time' in metadata."
-            )
-
-        def bucket_key(node):
-            dt = datetime.fromisoformat(node["metadata"]["time"])
-            if separate_by == "day":
-                return (dt.year, dt.month, dt.day)
-            elif separate_by == "week":
-                iso = dt.isocalendar()
-                return (iso.year, iso.week)
-            elif separate_by == "month":
-                return (dt.year, dt.month)
-            else:  # year
-                return (dt.year,)
-
-        sorted_nodes = sorted(nodes, key=bucket_key)
-
-        groups = []
-        current_key = None
-        for node in sorted_nodes:
-            key = bucket_key(node)
-            if key != current_key:
-                groups.append([])
-                current_key = key
-            groups[-1].append(node)
-
-        return groups
-
-    def _split_by_session(self, nodes: list, session_number: int) -> list:
-        """
-        Sort nodes by metadata["input_session"], group them into per-session
-        buckets, then chunk those buckets into groups of *session_number*.
-
-        Args:
-            nodes: List of node dicts, each with metadata["input_session"] as
-                   an integer session identifier.
-            session_number: How many sessions to merge into each output group.
-                            1 → each session is its own group.
-                            2 → every two consecutive sessions form one group.
-
-        Returns:
-            List of lists ordered by session; each inner list contains all
-            nodes belonging to that chunk of sessions.
-        """
-        if session_number < 1:
-            raise ValueError(f"session_number must be >= 1; got {session_number}.")
-
-        missing = [i for i, n in enumerate(nodes) if "input_session" not in n.get("metadata", {})]
-        if missing:
-            raise ValueError(f"Nodes at indices {missing} are missing 'input_session' in metadata.")
-
-        sorted_nodes = sorted(nodes, key=lambda n: n["metadata"]["input_session"])
-
-        # Collect nodes into ordered per-session buckets
-        session_buckets: dict[int, list] = {}
-        for node in sorted_nodes:
-            sid = node["metadata"]["input_session"]
-            if sid not in session_buckets:
-                session_buckets[sid] = []
-            session_buckets[sid].append(node)
-
-        # Chunk the buckets and flatten each chunk into one group
-        ordered = list(session_buckets.values())
-        groups = []
-        for i in range(0, len(ordered), session_number):
-            chunk = ordered[i : i + session_number]
-            groups.append([node for session in chunk for node in session])
-
-        return groups
-
-    def _split_input(self, input_nodes: list, separator: Separator):
-        """
-        Split the input into a list of strings based on the separator.
-        """
-        if separator.type == "time":
-            return self._split_by_time(input_nodes, separator.value)
-        elif separator.type == "session":
-            return self._split_by_session(input_nodes, int(separator.value))
-        elif separator.type == "number":
-            return self._split_by_number(input_nodes, int(separator.value))
-        elif separator.type == "all":
-            return [input_nodes]
-        else:
-            raise ValueError(f"Separator type {separator.type!r} not supported")
     
     def _fmt_nodes(self, nodes: list, node_type: str):
         """
@@ -182,6 +70,23 @@ class Lattice:
             else:
                 raise ValueError(f"Node type {node_type} not supported")
         return "\n".join(fmt_nodes)
+    
+    def auto_config(self, target_layer_num: int | None = None):
+        # suggests config for the lattice based on rough heuristics
+        # TODO: Update this to be more sophisticated
+        num_interactions = len(self.interactions)
+        nminus_layer_size = 10
+        if num_interactions < nminus_layer_size:
+            self.config = Sequential(SessionLayer(n=1), AllLayer())
+            return self.config
+        if target_layer_num is None:
+            target_layer_num = max(2, math.floor(math.log(num_interactions, 10)))    
+        n = max(2, math.ceil(math.log(num_interactions / nminus_layer_size, target_layer_num)))
+        layers = [SessionLayer(n=n) for _ in range(target_layer_num)]
+        layers.append(AllLayer())
+        print(f"Generated a config with {target_layer_num} layers")
+        self.config = Sequential(*layers)
+        return self.config
     
     def print_layer(self, layer_num: int | None = None):
         """
@@ -210,7 +115,7 @@ class Lattice:
             print()
 
 
-    async def _build_first_edges(self, grouped_obs: list, insights: list, progress=None):
+    async def _build_first_edges(self, grouped_obs: list, insights: list):
         """
         Build the edges for the first layer of the lattice.
 
@@ -222,9 +127,9 @@ class Lattice:
         for insight in insights:
             sid = insight["metadata"]["input_session"]
             session_observations = self._fmt_nodes(grouped_obs[sid], "observation")
-            prompt = MAP_EVIDENCE_PROMPT.format(observations=session_observations, evidence=insight["supporting_evidence"])
-            edges.append(self.evidence_model.call(prompt, resp_format=SupportingObservationsResponse))
-        return await batched_call(edges, max_concurrent=self.max_concurrent, return_exceptions=True, progress=progress)
+            prompt = MAP_EVIDENCE_PROMPT.format(observations=session_observations, evidence=insight["supporting_evidence"]) 
+            edges.append(self.evidence_model.call(prompt,       resp_format=SupportingObservationsResponse))
+        return await batched_call(edges, max_concurrent=self.max_concurrent, return_exceptions=True)
     
     async def make_observations(self):
         """
@@ -237,28 +142,26 @@ class Lattice:
         self.num_nodes.append(len(self.observations))
         return self.observations
     
-    async def make_first_layer(self, separator: Separator, _bar=None):
+    async def make_first_layer(self, layer: LatticeLayer):
         """
         Make the first layer of the lattice turning observations into insights.
         """
-        grouped_nodes = self._split_input(self.current_layer, separator)
+        grouped_nodes = layer.split(self.current_layer)
 
         # Stage 1: generate raw insights per group
         logger.info("Generating insights for %d groups of observations", len(grouped_nodes))
-        with (_bar("  generating", len(grouped_nodes)) or _NullCtx()) as bar:
-            raw_results = await batched_call(
-                [
-                    self.model.call(OBSERVATION_TO_INSIGHT_PROMPT.format(
-                        user_name=self.name,
-                        observations=self._fmt_nodes(group, "observation"),
-                        limit=self.min_insights,
-                    ))
-                    for group in grouped_nodes
-                ],
-                max_concurrent=self.max_concurrent,
-                return_exceptions=True,
-                progress=bar,
-            )
+        raw_results = await batched_call(
+            [
+                self.model.call(OBSERVATION_TO_INSIGHT_PROMPT.format(
+                    user_name=self.name,
+                    observations=self._fmt_nodes(group, "observation"),
+                    limit=self.min_insights,
+                ))
+                for group in grouped_nodes
+            ],  
+            max_concurrent=self.max_concurrent,
+            return_exceptions=True,
+        )
 
         valid_raw: list[tuple[int, str]] = []  # (original group index, raw text)
         for sid, result in enumerate(raw_results):
@@ -269,13 +172,11 @@ class Lattice:
 
         # Stage 2: format valid raw insights
         logger.info("Formatting insights for %d groups", len(valid_raw))
-        with (_bar("  formatting", len(valid_raw)) or _NullCtx()) as bar:
-            formatted_results = await batched_call(
-                [self.model.call(FORMAT_INSIGHT_PROMPT.format(insights=raw), Insights) for _, raw in valid_raw],
-                max_concurrent=self.max_concurrent,
-                return_exceptions=True,
-                progress=bar,
-            )
+        formatted_results = await batched_call(
+            [self.model.call(FORMAT_INSIGHT_PROMPT.format(insights=raw), Insights) for _, raw in valid_raw],
+            max_concurrent=self.max_concurrent,
+            return_exceptions=True,
+        )
 
         output_insights = []
         insight_id = 0
@@ -295,8 +196,7 @@ class Lattice:
 
         # Stage 3: build edges; _build_first_edges returns exceptions in-place
         logger.info("Building edges mapping observations to insights")
-        with (_bar("  mapping edges", len(output_insights)) or _NullCtx()) as bar:
-            edges = await self._build_first_edges(grouped_nodes, output_insights, progress=bar)
+        edges = await self._build_first_edges(grouped_nodes, output_insights)
 
         for eid, edge in enumerate(edges):
             if isinstance(edge, BaseException):
@@ -315,7 +215,7 @@ class Lattice:
         self.current_layer = output_insights
         return output_insights
     
-    async def make_layer(self, separator: Separator, input_layer: list = None, _bar=None):
+    async def make_layer(self, layer: LatticeLayer, input_layer: list = None):
         """
         Make subsequent layers of the lattice turning insights into new insights.
         """
@@ -325,8 +225,8 @@ class Lattice:
         if input_layer is not None:
             self.current_layer = input_layer
 
-        grouped_nodes = self._split_input(self.current_layer, separator)
-
+        grouped_nodes = layer.split(self.current_layer)
+        
         # Generate insights for each group of observations
         logger.info(f"Generating insights for {len(grouped_nodes)} groups of insights")
         tasks = []
@@ -334,8 +234,7 @@ class Lattice:
             fmt_nodes = self._fmt_nodes(group, "insight")
             input_prompt = INSIGHT_SYNTHESIS_PROMPT.format(user_name=self.name, insights=fmt_nodes, limit=self.min_insights)
             tasks.append(self.model.call(input_prompt))
-        with ((_bar("  synthesizing", len(tasks)) if _bar else None) or _NullCtx()) as bar:
-            group_insights = await batched_call(tasks, max_concurrent=self.max_concurrent, return_exceptions=True, progress=bar)
+        group_insights = await batched_call(tasks, max_concurrent=self.max_concurrent, return_exceptions=True)
 
         output_insights = []
         insight_id = 0
@@ -381,50 +280,31 @@ class Lattice:
 
         return output_insights
     
-    async def build(self, config: dict):
+    async def build(self):
         """
         Build the lattice according to the config.
+
+        Args:
+            config: A ``Sequential`` of ``LatticeLayer`` objects, or the legacy
+                    ``dict`` format ``{0: {"type": ..., "value": ...}, ...}``.
         """
-        try:
-            from tqdm.auto import tqdm
-        except ImportError:
-            tqdm = None
+        if self.config is None:
+            raise ValueError("No config provided. Run auto_config() to generate a default config or provide a custom config.")
+        layers = self.config
 
-        logger.info(f"Building lattice with config: {config}")
-
-        need_obs = self.observations is None
-        total_steps = (1 if need_obs else 0) + len(config)
-        step = 0
-
-        def _print(msg: str):
-            print(msg, flush=True)
-
-        def _bar(desc: str, total: int):
-            if tqdm is None:
-                _print(f"  {desc} (0/{total})")
-                return None
-            return tqdm(total=total, desc=desc, unit="call", leave=True)
-
-        if need_obs:
-            step += 1
-            _print(f"\n[{step}/{total_steps}] Observing interactions")
+        logger.info(f"Building lattice with layers: {layers}")
+        if self.observations is None:
+            logger.info("Making observations")
             await self.make_observations()
-            _print(f"  → {len(self.observations)} observations")
         else:
-            _print(f"[0/{total_steps}] Observations already loaded  ({len(self.observations)} observations)")
+            logger.info("Observations loaded")
 
-        for layer in config:
-            step += 1
-            sep = config[layer]
-            config_layer = Separator(type=sep["type"], value=sep["value"])
-            _print(f"\n[{step}/{total_steps}] Building layer {self.layer_num}  ({sep['type']} × {sep['value']})")
-            if layer == 0:
-                result = await self.make_first_layer(separator=config_layer, _bar=_bar)
+        for i, layer in enumerate(layers):
+            logger.info(f"Building layer {self.layer_num}")
+            if i == 0:
+                await self.make_first_layer(layer=layer)
             else:
-                result = await self.make_layer(separator=config_layer, _bar=_bar)
-            _print(f"  → {len(result)} insights")
-
-        _print(f"\nLattice complete — {total_steps} step(s), {sum(self.num_nodes)} total nodes")
+                await self.make_layer(layer=layer)
 
     def save(self, save_path: str = "lattice.json"):
         """

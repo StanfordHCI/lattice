@@ -1,5 +1,5 @@
-import lattice
-from test_data import MOCK_OBSERVATIONS, MOCK_INTERACTION_DATA
+import latticing
+from test_data import MOCK_OBSERVATIONS, MOCK_INTERACTION_DATA, MOCK_INTERACTION
 import asyncio
 import os
 import yaml
@@ -7,30 +7,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 async def test_lattice():
-    with open("example.yaml", "r") as f:
-        config = yaml.safe_load(f)
-
-
-    l = lattice.Lattice(
+    l = latticing.Lattice(
         name="User",
         interactions=MOCK_INTERACTION_DATA,
         description="the user's actions and screen activities",
-        model=lattice.AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
-        evidence_model=lattice.AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
-        format_model=lattice.SyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        observer_model=latticing.AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        insight_model=latticing.AsyncLLM(name="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY")),
+        evidence_model=latticing.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        format_model=latticing.SyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
     )
-
-    await l.build(config)
-    l.save(save_path="lattice.json")
+    config = l.auto_config()
+    print(config)
+    await l.build()
+    l.save(save_path="test_lattice.json")
     # await l.make_first_layer(separator={"type": "time", "value": "day"})
 
 async def test_edges():
-    l = lattice.Lattice(
+    l = latticing.Lattice(
         name="User",
         observations=MOCK_OBSERVATIONS, 
-        model=lattice.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
-        evidence_model=lattice.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
-        format_model=lattice.SyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        model=latticing.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        evidence_model=latticing.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        format_model=latticing.SyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
     )
 
     MOCK_O = [[
@@ -73,20 +71,35 @@ async def test_edges():
     edges = await l._build_first_edges(MOCK_O, MOCK_I)
     print(edges)
 
+def test_mock_auto_config(size: int = 100):
+    interactions = [MOCK_INTERACTION for _ in range(size)]
+    l = latticing.Lattice(
+        name="User",
+        interactions=interactions,
+        description="the user's actions and screen activities",
+        observer_model=latticing.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        insight_model=latticing.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        evidence_model=latticing.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        format_model=latticing.SyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+    )
+    config = l.auto_config()
+    print(config)
+    return config
+
 def test_visualize():
-    l = lattice.Lattice(
+    l = latticing.Lattice(
         name="User",
         interactions=MOCK_INTERACTION_DATA,
         description="the user's actions and screen activities",
-        model=lattice.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
-        evidence_model=lattice.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
-        format_model=lattice.SyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        model=latticing.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        evidence_model=latticing.AsyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        format_model=latticing.SyncLLM(name="gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
     )
     fig = l.visualize(load_path="../examples/lattice.json")
     fig.show()
 
 def test_version():
-    assert lattice.__version__ == "0.1.0"
+    assert latticing.__version__ == "0.1.0"
 
 if __name__ == "__main__":
-    test_visualize()
+    asyncio.run(test_lattice())

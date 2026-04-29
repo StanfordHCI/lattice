@@ -45,11 +45,71 @@ def extract_json_snippet(text: str) -> str:
     return candidate
 
 
+def _process_json_chars(payload: str) -> str:
+    """Single-pass fix: escape literal control chars inside strings and strip // and /* */ comments outside strings."""
+    result = []
+    in_string = False
+    escape_next = False
+    i = 0
+    n = len(payload)
+    while i < n:
+        ch = payload[i]
+        if escape_next:
+            result.append(ch)
+            escape_next = False
+            i += 1
+        elif in_string:
+            if ch == '\\':
+                result.append(ch)
+                escape_next = True
+                i += 1
+            elif ch == '"':
+                in_string = False
+                result.append(ch)
+                i += 1
+            elif ch == '\n':
+                result.append('\\n')
+                i += 1
+            elif ch == '\r':
+                result.append('\\r')
+                i += 1
+            elif ch == '\t':
+                result.append('\\t')
+                i += 1
+            else:
+                result.append(ch)
+                i += 1
+        else:
+            # Outside a string
+            if ch == '"':
+                in_string = True
+                result.append(ch)
+                i += 1
+            elif ch == '/' and i + 1 < n and payload[i + 1] == '/':
+                # Line comment — skip to end of line
+                while i < n and payload[i] != '\n':
+                    i += 1
+            elif ch == '/' and i + 1 < n and payload[i + 1] == '*':
+                # Block comment — skip to */
+                i += 2
+                while i < n - 1:
+                    if payload[i] == '*' and payload[i + 1] == '/':
+                        i += 2
+                        break
+                    i += 1
+            else:
+                result.append(ch)
+                i += 1
+    return ''.join(result)
+
+
 def _sanitise_json_like(payload: str) -> str:
     """
     Apply common fixes to LLM output that looks like JSON but is malformed.
     """
     out = payload.translate(_SMART_QUOTES)
+    # Strip // and /* */ comments; escape literal control chars inside strings
+    out = _process_json_chars(out)
     # Trailing commas before ] or }
     out = re.sub(r",(\s*[}\]])", r"\1", out)
     # Missing comma between adjacent structures (common LLM mistake)
@@ -97,24 +157,43 @@ def parse_model_json(text: str, *, logger: logging.Logger | None = None) -> Any:
     try:
         return _loads(snippet)
     except json.JSONDecodeError:
-        sanitised = _sanitise_json_like(snippet)
-        try:
-            if logger:
-                logger.warning("Parsed JSON after sanitising LLM output.")
-            return _loads(sanitised)
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Unable to parse JSON from model response: {exc}"
-            ) from exc
+        pass
+
+    sanitised = _sanitise_json_like(snippet)
+    try:
+        if logger:
+            logger.warning("Parsed JSON after sanitising LLM output.")
+        return _loads(sanitised)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Unable to parse JSON from model response: {exc}"
+        ) from exc
 
 def parse_model_json_with_fallback(text: str, model: SyncLLM, resp_format: Any) -> Any:
     """
-    Convert Anthropic (or other LLM) JSON-ish output into Python objects.
+    Re-format malformed LLM JSON output by asking the format model to produce
+    a valid response conforming to resp_format's schema.
+
+    Extracts just the JSON portion from the raw text before sending to the model
+    to avoid overloading it with surrounding commentary.
     """
-    prompt = f"""
-    Convert the following text into a JSON object. Return just the JSON, no other text.
-    {text}
-    """
+    try:
+        snippet = extract_json_snippet(text)
+    except ValueError:
+        snippet = text
+
+    # Limit the snippet to avoid overflowing the model's useful context
+    MAX_CHARS = 12_000
+    if len(snippet) > MAX_CHARS:
+        snippet = snippet[:MAX_CHARS]
+
+    schema = resp_format.model_json_schema() if hasattr(resp_format, 'model_json_schema') else {}
+    prompt = (
+        "The following is malformed JSON. Fix it so it is valid and matches the schema below. "
+        "Return ONLY the corrected JSON object.\n\n"
+        f"Schema:\n{json.dumps(schema, indent=2)}\n\n"
+        f"Malformed JSON:\n{snippet}"
+    )
     resp = model.call(prompt=prompt, resp_format=resp_format)
     return resp
 

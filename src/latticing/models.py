@@ -28,13 +28,22 @@ class Insight(BaseModel):
     insight: str
     context: str
     supporting_evidence: List[str]
-    merged: Optional[List[str]] = None    
+    merged: Optional[List[str]] = None
 
     @field_validator("supporting_evidence", mode="before")
     @classmethod
     def coerce_to_list(cls, v):
         if isinstance(v, str):
             return [v]
+        return v
+
+    @field_validator("merged", mode="before")
+    @classmethod
+    def coerce_merged_to_str_list(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, list):
+            return [str(item) for item in v]
         return v
 
 class Insights(BaseModel):

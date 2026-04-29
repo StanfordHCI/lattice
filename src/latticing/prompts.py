@@ -133,12 +133,16 @@ Return your results in this exact JSON format:
 INSIGHT_SYNTHESIS_PROMPT = """
 I have insights across multiple sessions of observing ${user_name} along with the context in which the insight emerges. 
 
-Your task is to help synthesize across the insights about ${user_name}.
+# TASK
+An "Insight" is a remarkable realization that you could leverage to better respond to a design challenge. Insights often grow from contradictions between two observations or from asking yourself “Why?” when you notice strange behavior. One way to identify the seeds of insights is to capture “tensions” and “contradictions” as you work.
 
-Across the insights, consider the following when combining them: 
-1. Which insights appear across most of them as a recurring theme or pattern?
-2. Which appear only in specific situations or for specific people?
-3. Which insights contradict each other — and what might that reveal about unique tensions?
+Your task is to help synthesize across the input about ${user_name} to form deeper insights about ${user_name}.
+
+Across the insights, consider the following categories:
+1. Recurring themes or patterns: Which insights appear across as a recurring theme or pattern EVEN if the context is different?
+2. Specific situations or for specific people: Which insights appear only in specific situations or for specific people? Why might this be the case?
+3. Contradiction and tension: Which insights contradict each other — and what might that reveal about unique tensions?
+4. Explanations and motivations: Which insights provide explanations and motivations for each other?
 
 At the end, review all of the insights and ensure that you did not miss important insights during the synthesis process. If there are unmerged insights, include them in the output. It is important to not lose any unique insights during the synthesis process.
 
@@ -150,8 +154,9 @@ Examples of synthesized insights:
     "tagline": "Mark’s frequent self-deprecating comments and expressions of uncertainty serve a dual purpose: authentically conveying anxiety while also inviting collaboration and feedback.",
     "insight": "Mark’s deliberate code-switching between formal academic prose and aggressively casual, irreverent language serves to assert status, test boundaries, and manage likability across varied social hierarchies. Casual language lets him engage in competitive or harsh discourse among peers with plausible deniability, while deference and formality reappear with senior collaborators.",
     "merged": [
-        "2-1",
-      ],
+        "2",
+        "10",
+    ],
     "context": "This linguistic flexibility is seen in Slack and Messages with peers (where he jokes, teases, and self-deprecates) versus careful formality in Overleaf or communication with advisors.",
     "reasoning": "Contrast between casual authority in technical help ('this shit'), banter with Connor ('hahaha yeah he took the money'), deferential tones used with advisor Maria, and strictly formal, precise academic writing in Overleaf demonstrates adaptive code-switching."
 }}
@@ -170,7 +175,7 @@ Return the final list of insights in a JSON format.
             "tagline": "Provide the insight in a succinct statement (1-2 sentences).", 
             "insight": "Insight in 3-4 sentences",
             "context": "1-2 sentences when this insight might apply (e.g., when writing text, in social settings)",
-            "merged": [List of insight IDs that are merged], // Return a list with a single ID if the insight is not merged
+            "merged": [List of insight IDs that were merged into this insight. Include a single ID if the insight is not merged with others.]
             "supporting_evidence": "1-2 sentences explaining why this insight emerged"
         }},
     ...

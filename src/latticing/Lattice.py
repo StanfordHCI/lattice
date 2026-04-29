@@ -46,9 +46,9 @@ class Lattice:
         self.config = config
 
 
-
         if observations is not None:
             self.observations = observations
+            self.lattice["nodes"][0] = self.observations
             self.current_layer = self.observations
             self.num_nodes = [len(self.observations)]
             self.layer_num = 1
@@ -194,6 +194,7 @@ class Lattice:
         for (sid, _), formatted in zip(valid_raw, formatted_results):
             if isinstance(formatted, BaseException):
                 logger.error("Insight formatting failed for group %d, skipping: %s", sid, formatted)
+                logger.error(formatted)
                 continue
             insights = Insights.model_validate(formatted) if not isinstance(formatted, Insights) else formatted
             for insight in insights.insights:
@@ -294,13 +295,9 @@ class Lattice:
 
         return output_insights
     
-    async def build(self):
+    async def forward(self):
         """
-        Build the lattice according to the config.
-
-        Args:
-            config: A ``Sequential`` of ``LatticeLayer`` objects, or the legacy
-                    ``dict`` format ``{0: {"type": ..., "value": ...}, ...}``.
+        One forward pass through the lattice.
         """
         if self.config is None:
             raise ValueError("No config provided. Run auto_config() to generate a default config or provide a custom config.")
@@ -345,6 +342,16 @@ class Lattice:
         }
         with open(save_path, "wb") as f:
             pickle.dump(output, f)
+    
+    async def backward(self):
+        return ValueError("Backward pass not implemented")
+    
+    async def build(self):
+        """
+        Build the lattice through passes
+        TODO: Implement backward pass
+        """
+        await self.forward()
     
     def visualize(self, load_path: str | None = None):
         """
